@@ -1,6 +1,7 @@
 **Node forums is a forum solution made by Snoozy1995. The solution is made using primarily javascript.**
 
 **Components:**
+
 * MongoDB database
 * Express webserver
 * Express session
@@ -9,6 +10,7 @@
 * socket.io
 
 **Features:**
+
 * Realtime UI updates
 * Discussion boards
 * Alternative views
@@ -18,6 +20,7 @@
 
 **Source Documentation**
 **Objects:**
+
 * permissionGroup
 * userController(socket)
   * .updateUI
