@@ -1,35 +1,30 @@
 /*process.on('uncaughtException', function (err) {
 console.log(err); //Send some notification about the error
 process.exit(1); });*/
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//-------------------------------------------CONSTANTS----------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 const   config          = require("./config/config");
 const   express         = require('express');
 const   app             = express();
 const   path            = require('path');
 const   compression     = require('compression')
 const   http            = require('http').Server(app);
-var   MongoDBStore    = require('connect-mongodb-session');
-const session = require('express-session');
-const   ObjectId = require('mongodb').ObjectId; 
+const   session         = require('express-session');
+const   MongoDBStore    = require('connect-mongodb-session')(session);
+const   ObjectId        = require('mongodb').ObjectId; 
 const   io              = require('socket.io')(http);
-const   cheerio         = require("cheerio");
-//const   config          = require("./config/config");
 const   fs              = require("fs");
 var sharedsession = require("express-socket.io-session");
 var global={},clients=[];
 var MongoClient = require('mongodb').MongoClient;
 var dburl = "mongodb://localhost:27017/?maxPoolSize=1";
 var dbname="nodeforum";
-MongoDBStore=MongoDBStore(session);
-var store = new MongoDBStore({
-  uri: 'mongodb://localhost:27017/',
-  databaseName: 'nodeforum',
-  collection: 'web_sessions'
-});
-// Catch errors
-store.on('error', function(error) {
-  assert.ifError(error);
-  assert.ok(false);
-});
+var store = new MongoDBStore({uri:'mongodb://localhost:27017/',databaseName:dbname,collection: 'web_sessions'});
+store.on('error', function(error) { assert.ifError(error); assert.ok(false); });
 const session1=session({
   secret: config.session_secret,
   resave: false,
@@ -46,8 +41,55 @@ app.use(session1);
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'pug');
 io.use(sharedsession(session1));
-io.on("connection",(socket)=>clients.push(new reactUI(socket)));
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//---------------------------------------MongoDB functions------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+function connectToMongo(first=false){
+  MongoClient.connect(dburl, function(err, db) {
+    if (err) throw err;
+    global.dboriginal=db;
+    global.db = db.db(dbname);
+    global.db.on('close',()=>{
+      console.log("[MONGODB][ERROR]: connection closed");
+      connectToMongo();
+    });
+    loadRoutes();
+    console.log(res);
+  });
+}
+function getCollectionArray(collection,next,sortby={}){
+  if(!collection||!next||!global||!global.db) return;
+  global.db.collection(collection).find(sortby).toArray(function(err, res) {
+    if (err) throw err;
+    if(next) return next(res);
+  });
+}
+function insertDocument(target,insert,next){
+  if(insert instanceof Object){
+    global.db.collection(target).insertOne(insert,(err, res)=>{
+      if (err) throw err;
+      if(next) return next(res);
+    });
+  }else if(insert.constructor instanceof Array){
+    global.db.collection(target).insertMany(insert,(err, res)=>{
+      if (err) throw err;
+      if(next) return next(res);
+    });
+  }
+}
+
+connectToMongo(true);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//-------------------------------------PERMISSION FUNCTIONS-----------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 const PERMISSIONS={
   READ:0x1,
   WRITE:0x2,
@@ -71,8 +113,32 @@ function permissionGroup(){
   return this;
 }
 
-function reactUI(socket){
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//---------------------------------------user Controller--------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+io.on("connection",(socket)=>clients.push(new userController(socket)));
+function userController(socket){
   this.socket=socket;
+
+  this.socket.on("login",(username,password)=>{
+    getCollectionArray("users",(res)=>{
+      if(!res.length) return; //Return socket.io error response
+      this.logged=true;
+      this.document=res[0];
+      return; //Logged in
+    },{username:username,password:password})
+  });
+  this.socket.on("register",(username,password,email)=>{
+
+  });
+
+  //Permission groups*
+  //Permissions*
+  //*to be implemented
+
   this.update_ui={};
   this.update_pending={};
   this.socket.on("register ui",(ui,target)=>{
@@ -84,7 +150,7 @@ function reactUI(socket){
     clients.splice(this,1);
   });
 }
-reactUI.prototype.updateUI=function(ui){
+userController.prototype.updateUI=function(ui){
   var res=this;
   switch(ui){
     case "directoryView":
@@ -105,64 +171,17 @@ reactUI.prototype.updateUI=function(ui){
       return app.render("api/"+ui,(err,html)=>res.renderUI(ui,html,err));
   }
 }
-reactUI.prototype.renderUI=function(ui,html,err){
+userController.prototype.renderUI=function(ui,html,err){
   if(err) return console.log(err);
   return this.socket.emit("update ui",this.update_ui[ui],html);
 }
 
-function connectToMongo(first=false){
-  MongoClient.connect(dburl, function(err, db) {
-    if (err) throw err;
-    global.dboriginal=db;
-    global.db = db.db(dbname);
-    global.db.on('close',()=>{
-      console.log("[MONGODB][ERROR]: connection closed");
-      connectToMongo();
-    });
-    loadRoutes();
-  });
-}
-connectToMongo(true);
-
-function createDirectory(insert={}){
-  if(!insert.name) return;
-    global.db.collection("directories").insertOne(insert, function(err, res) {
-    if (err) throw err;
-  });
-  return this;
-}
-
-function getCollectionArray(collection,next,sortby={}){
-  if(!collection||!next||!global||!global.db) return;
-  global.db.collection(collection).find(sortby).toArray(function(err, res) {
-    if (err) throw err;
-    if(next) next(res);
-  });
-}
-
-//createDirectory({name:"Test directory 1",category:true});
-
-function insertIntoCollection(target,insert){
-  MongoClient.connect(dburl, function(err, db) {
-    if (err) throw err;
-    var dbo = db.db(dbname);
-    if(insert instanceof Object){
-      dbo.collection(target).insertOne(insert, function(err, res) {
-        if (err) throw err;
-        db.close();
-        return res.insertedId;
-      });
-    }else if(insert.constructor instanceof Array){
-      dbo.collection(target).insertMany(insert, function(err, res) {
-        if (err) throw err;
-        db.close();
-        return res.insertedIds;
-      });
-    }
-  });
-}
-
-//Generate a directoryTree view object
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//----------------------------------------directory Tree--------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 function directoryTree(directories,config={}){
   if(!directories) return;
   this.directoriesX=directories;
@@ -212,9 +231,16 @@ directoryTree.prototype.pendingF=function(increase=-1){
   }
 }
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//----------------------------------------originController------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 //Used to create the backlink from current directory.
 //Should be able to support discussions.
-function createOrigin(id,next){
+function originController(id,next){
   this.next=next;
   this.endArray=[];
   getCollectionArray("directories",(directories)=>{
@@ -222,7 +248,7 @@ function createOrigin(id,next){
     this.testX(id);
   });
 }
-createOrigin.prototype.testX=function(id){
+originController.prototype.testX=function(id){
   for(var i=0;i<this.directories.length;i++){
     if(this.directories[i]._id.toString()!=id.toString()) continue;
     this.endArray.unshift(this.directories[i]);
@@ -233,13 +259,20 @@ createOrigin.prototype.testX=function(id){
   }
 }
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//----------------------------------------Express Routing-------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 //First loaded after everything else is loaded.
 function loadRoutes(){
   app.get("/createDiscussion*",(req,res)=>{
     if(!req.query.id||req.query.id.length!=12&&req.query.id.length!=24) return res.redirect("/");
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return res.redirect("/");
-      new createOrigin(directories[0]._id,(r)=>{
+      new originController(directories[0]._id,(r)=>{
         return res.render("directory",{query:req.query,origin:r});
       });
     },{_id:ObjectId(req.query.id)});
@@ -249,13 +282,13 @@ function loadRoutes(){
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return;
-      new createOrigin(directories[0]._id,(r)=>{
+      new originController(directories[0]._id,(r)=>{
         return res.render("directory",{query:req.query,origin:r});
       });
     },{_id:ObjectId(req.params.id)});
     getCollectionArray("discussions",(disc)=>{
       if(!disc.length) return;
-      new createOrigin(disc[0]._id,(r)=>{
+      new originController(disc[0]._id,(r)=>{
         return res.render("discussion",{query:req.query,origin:r});
       });
     },{_id:ObjectId(req.params.id)});
