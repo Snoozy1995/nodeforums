@@ -1,7 +1,7 @@
 /*process.on('uncaughtException', function (err) {
 console.log(err); //Send some notification about the error
 process.exit(1); });*/
-const   config          = require("config/config");
+const   config          = require("./config/config");
 const   express         = require('express');
 const   app             = express();
 const   path            = require('path');
