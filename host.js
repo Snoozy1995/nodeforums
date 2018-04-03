@@ -1,6 +1,7 @@
 /*process.on('uncaughtException', function (err) {
 console.log(err); //Send some notification about the error
 process.exit(1); });*/
+const   config          = require("config/config");
 const   express         = require('express');
 const   app             = express();
 const   path            = require('path');
@@ -30,7 +31,7 @@ store.on('error', function(error) {
   assert.ok(false);
 });
 const session1=session({
-  secret: 'keyboard1catzer12',
+  secret: config.session_secret,
   resave: false,
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
