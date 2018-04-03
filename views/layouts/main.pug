@@ -1,0 +1,152 @@
+html
+  head
+    meta(charset='utf-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1.0')
+    link(rel="stylesheet",href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.3.1/semantic.min.css")
+    script(src="https://code.jquery.com/jquery-3.3.1.js" nintegrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60=" crossorigin="anonymous")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.3.1/semantic.min.js")
+    script(src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.1.0/socket.io.js")
+    style.
+      .main.container {
+        margin-top: 2em;
+      }
+
+      .main.menu {
+        margin-top: 4em;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        transition: box-shadow 0.5s ease, padding 0.5s ease;
+      }
+      .main.menu .item img.logo {
+        margin-right: 1.5em;
+      }
+
+      .menu {
+        position: relative;
+        left: 0;
+        transition: left 0.5s ease;
+      }
+
+      .main.menu.fixed {
+        background-color: #FFFFFF;
+        border: 1px solid #DDD;
+        box-shadow: 0px 3px 5px rgba(0, 0, 0, 0.2);
+        left:0px !important;
+      }
+      .overlay.fixed .menu {
+        left: 800px;
+      }
+
+      .ui.footer.segment {
+        margin: 5em 0em 0em;
+        padding: 5em 0em;
+      }
+      #container{
+        min-height:600px;
+      }
+    block meta
+  body
+    script.
+      const socket=io(window.location.hostname,{query:{id:location.pathname.substring(1)}});
+      $(document).ready(function() {
+        // fix main menu to page on passing
+        $('.main.menu').visibility({
+          type: 'fixed'
+        });
+        // lazy load images
+        $('.image').visibility({
+          type: 'image',
+          transition: 'vertical flip in',
+          duration: 500
+        });
+        // show dropdown on hover
+        $('.main.menu  .ui.dropdown').dropdown({
+          on: 'hover'
+        });
+        socket.on("update ui",(ui,data)=>$(ui).html(data));
+        socket.emit("register ui","railProfileView",".ui.left.small.attached.rail");
+      });
+    #container
+      .ui.main.text.container
+        h1.ui.header Snoozy's Development Forum
+        p This forum is currently being developed.
+      .ui.borderless.main.menu
+        .ui.text.container
+          a(href="http://127.0.0.1/").item
+            i.home.icon
+          a.item
+            i.user.icon
+          a.ui.dropdown.item(tabindex='0')
+            | Original
+            i.dropdown.icon
+            .menu(tabindex='-1')
+              .item Latest
+              .item Popular
+          .ui.right.floated.item
+            .ui.small.icon.input
+              input(placeholder='Search...', type='text')
+              i.search.icon
+      .ui.text.container
+        div
+          .ui.small.breadcrumb
+            if origin && origin.length
+              a.section(href="/") Forums
+              - for(var i=0;i<origin.length;i++)
+                i.icon.right.chevron.divider
+                a.section(href="/"+origin[i]._id.toString()) #{origin[i].name}
+        .ui.vertical.segment
+          .ui.left.small.attached.rail
+            block leftRail
+          .ui.right.attached.rail
+            block rightRail
+          block page
+    .ui.inverted.vertical.footer.segment
+      .ui.center.aligned.container
+        .ui.stackable.inverted.divided.grid
+          .three.wide.column
+            h4.ui.inverted.header Group 1
+            .ui.inverted.link.list
+              a.item(href='#') Link One
+              a.item(href='#') Link Two
+              a.item(href='#') Link Three
+              a.item(href='#') Link Four
+          .three.wide.column
+            h4.ui.inverted.header Group 2
+            .ui.inverted.link.list
+              a.item(href='#') Link One
+              a.item(href='#') Link Two
+              a.item(href='#') Link Three
+              a.item(href='#') Link Four
+          .three.wide.column
+            h4.ui.inverted.header Group 3
+            .ui.inverted.link.list
+              a.item(href='#') Link One
+              a.item(href='#') Link Two
+              a.item(href='#') Link Three
+              a.item(href='#') Link Four
+          .seven.wide.column
+            h4.ui.inverted.header Statistics
+            .ui.statistics.three
+              .ui.inverted.statistic
+                .value
+                  | 4
+                .label
+                  | Online
+              .ui.inverted.statistic
+                .value
+                  | 22
+                .label
+                  | Members
+              .ui.inverted.statistic
+                .value
+                  | 221
+                .label
+                  | Discussions
+        .ui.inverted.section.divider
+        //img.ui.centered.mini.image(src='assets/images/logo.png')
+        .ui.horizontal.inverted.small.divided.link.list
+          a.item(href='#') Site Map
+          a.item(href='#') Contact Us
+          a.item(href='#') Terms and Conditions
+          a.item(href='#') Privacy Policy

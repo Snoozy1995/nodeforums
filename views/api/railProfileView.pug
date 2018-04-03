@@ -1,0 +1,38 @@
+div(style="height:100px;width:100%;")
+.ui.sticky
+  div.ui.card(style="width:200px")
+    if logged
+      .blurring.dimmable
+        .ui.dimmer
+          .content
+            .center
+              .ui.inverted.button View profile
+        img.ui.image(src='/images/elliot.jpg')
+      .content
+        p(style="text-align:center;") This months activity
+        .ui.relaxed.horizontal.list(style="margin-left:15px;")
+          .item
+            a(data-tooltip="Discussions started",data-inverted="")
+              i.icon.newspaper
+              p 1
+          .item
+            a(data-tooltip="Comments made",data-inverted="")
+              i.icon.comment
+              p 42
+          .item
+            a(data-tooltip="Likes received",data-inverted="")
+              i.icon.thumbs.up
+              p 33
+      .extra.content(style="text-align:center;")
+        p Extra content
+      script.
+        $(document).ready(function() {
+          $(".ui.sticky").sticky({offset:80});
+          $('.dimmable').dimmer({
+            on: 'hover'
+          });
+          $('.ui.basic.modal').modal('show');
+        });
+    else
+      a.ui.positive.button.login(href="/login") Login
+      a.ui.primary.button.register(href="/register") Register

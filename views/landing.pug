@@ -1,0 +1,8 @@
+extends layouts/main.pug
+
+block page
+  .directoryView
+    .ui.active.inverted.dimmer
+      .ui.text.loader
+  script.
+    socket.emit("register ui","directoryView",".directoryView");

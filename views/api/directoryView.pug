@@ -1,0 +1,32 @@
+if directories && directories.length
+  each directory in directories
+    a(href='/'+directory._id.toString()).ui.horizontal.divider.header #{directory.name}
+    .ui.items
+      if directory.children && directory.children.length
+        - var bam=0;
+        each child in directory.children
+          if bam != 0
+            .ui.divider
+          - bam++;
+          .item(style="min-height:50px;")
+            .ui.mini.image
+              i.icon.folder.open.outline.link(style="font-size:3em;")
+            .middle.aligned.content
+              h3.ui.header
+                a(href="/"+child._id.toString()) #{child.name}
+                if child.description || child.children && child.children.length
+                  .sub.header 
+                    if child.description
+                      a(href="/"+child._id.toString()) #{child.description}
+                    if child.children && child.children.length
+                      each child2 in child.children
+                        a(href="/"+child2._id.toString())
+                          i.icon.folder.outline.link
+                          | #{child2.name}
+            .ui.right.floated
+              .content
+                .meta
+                  a Latest discussion
+                  | by 
+                  a Somebody
+      block Discussions
