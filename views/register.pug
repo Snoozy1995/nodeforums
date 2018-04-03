@@ -1,22 +1,93 @@
 extends layouts/main.pug
 
 block page
+  .ui.mini.fluid.two.item.menu
+    a.item(href="/login") Login
+    a.item.active(href="/register") Register
   h1.ui.header Register
-  p
-    .ui.fluid.icon.input
-      input(placeholder="Username",type="text")
-      i.icon.search
-  p
-    .ui.fluid.icon.input
-      input(placeholder="Password",type="password")
-      i.icon.search
-  p
-    .ui.fluid.icon.input
-      input(placeholder="Email",type="text")
-      i.icon.search
-  p
-    .ui.fluid.icon.input
-      input(placeholder="Repeat email",type="password")
-      i.icon.search
-  p
-    a.ui.fluid.positive.button Register
+  form.ui.fluid.form
+    .field
+      input(placeholder="Username",type="text",id="username",required)
+      .state
+    .ui.divider
+    .field
+      input(placeholder="Password",type="password",id="password",minlength="6",required)
+      .state
+    .ui.divider
+    .field
+      input(placeholder="Repeat password",type="password",id="password2",minlength="6",required)
+      .state
+    .ui.divider
+    .field
+      input(placeholder="Email",type="email",id="email",required)
+      .state
+    .ui.divider
+    .field
+      button.ui.fluid.positive.button(type="submit") Register
+  script.
+    var timers={};
+    function validateInputs(next){
+      var valid=true;
+      $("input").each(function(){
+        if(this.checkValidity()==false){
+          valid=false;
+          $(this).parent().find(".state").html("<div class='ui pointing red basic label'>"+this.validationMessage+"</div>");
+        }else{
+          $(this).parent().find(".state").html('');
+        }
+      });
+      return valid;
+    }
+    function validateInput(input){
+      if(input.checkValidity()==false) return $("#"+input.id).parent().find(".state").html("<div class='ui pointing red basic label'>"+input.validationMessage+"</div>");
+      return $("#"+input.id).parent().find(".state").html('');
+    }
+    if($('#username').val().length){ socket.emit("usernameAvailable",$('#username').val()); }
+    $('#username').on('input', function() {
+      if(!$(this).val().length) return;
+      clearTimeout(timers.usernameCheck);
+      timers.usernameCheck=setTimeout(()=>{
+        socket.emit("usernameAvailable",$(this).val());
+      },1000);
+    });
+    $('#email').on('input',function(){
+      if(!$(this).val().length) return;
+      clearTimeout(timers.emailCheck);
+      timers.emailCheck=setTimeout(()=>{
+        socket.emit("emailAvailable",$(this).val());
+      },1000);
+    });
+    $(":password").on("input",()=>{
+      if($("#password2").val().length<6||$("#password").val().length<6) return;
+      clearTimeout(timers.passSame);
+      timers.passSame=setTimeout(()=>{
+        if($("#password").val()==$("#password2").val()){ $("#password2")[0].setCustomValidity(""); }
+        else{ $("#password2")[0].setCustomValidity("Passwords are not matching."); }
+        return validateInput($("#password2")[0]);
+      },500);
+    });
+    socket.on("usernameAvailable",(res)=>{
+      if(res){ $("#username")[0].setCustomValidity(""); }
+      else{ $("#username")[0].setCustomValidity("Account already registered with username."); }
+      return validateInput($("#username")[0]);
+    });
+    socket.on("emailAvailable",(res)=>{
+      if(res){ $("#email")[0].setCustomValidity(""); }
+      else{ $("#email")[0].setCustomValidity("Account already registered with email."); }
+      return validateInput($("#email")[0]);
+    });
+    $(":submit").click(function(e){
+      e.preventDefault();
+      var valid=validateInputs();
+      if(valid) return socket.emit("register",$("#username").val(),$("#password").val(),$("#email").val());
+    });
+    function sha256(str) { return crypto.subtle.digest("SHA-256",new TextEncoder("utf-8").encode(str)).then((hash)=>{return hex(hash);}); }
+    function hex(buffer) {
+      var hexCodes = [];
+      var view = new DataView(buffer);
+      for (var i = 0; i < view.byteLength; i += 4) {
+        var value = view.getUint32(i); var stringValue = value.toString(16); var padding = '00000000'; var paddedValue = (padding + stringValue).slice(-padding.length);
+        hexCodes.push(paddedValue);
+      }
+      return hexCodes.join("");
+    }

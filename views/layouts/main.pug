@@ -75,8 +75,9 @@ html
         .ui.text.container
           a(href="http://127.0.0.1/").item
             i.home.icon
-          a.item
-            i.user.icon
+          if !logged
+            a.item(href="/login")
+              i.user.icon
           a.ui.dropdown.item(tabindex='0')
             | Original
             i.dropdown.icon

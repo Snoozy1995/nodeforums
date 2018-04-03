@@ -18,12 +18,11 @@ const   MongoDBStore    = require('connect-mongodb-session')(session);
 const   ObjectId        = require('mongodb').ObjectId; 
 const   io              = require('socket.io')(http);
 const   fs              = require("fs");
+const   crypto          = require("crypto");
 var sharedsession = require("express-socket.io-session");
 var global={},clients=[];
 var MongoClient = require('mongodb').MongoClient;
-var dburl = "mongodb://localhost:27017/?maxPoolSize=1";
-var dbname="nodeforum";
-var store = new MongoDBStore({uri:'mongodb://localhost:27017/',databaseName:dbname,collection: 'web_sessions'});
+var store = new MongoDBStore({uri:'mongodb://'+config.mongoIP+':'+config.mongoPort+'/',databaseName:config.mongoDB,collection: 'web_sessions'});
 store.on('error', function(error) { assert.ifError(error); assert.ok(false); });
 const session1=session({
   secret: config.session_secret,
@@ -34,55 +33,44 @@ const session1=session({
   saveUninitialized: true,
   store: store
 });
-
-// APP ROUTING
 app.use(compression());
 app.use(session1);
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'pug');
-io.use(sharedsession(session1));
-
+io.use(sharedsession(session1,{autoSave:true}));
+function endProcess(err){ console.log(err); process.exit(1); }
+if(!config.mongoIP||!config.mongoPort||!config.mongoDB||!config.session_secret||!config.mongoSecret) return endProcess("Configuration file not properly setup. Please refer to config/config.js");
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
 //---------------------------------------MongoDB functions------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-function connectToMongo(first=false){
-  MongoClient.connect(dburl, function(err, db) {
+function connectToMongo(){
+  MongoClient.connect('mongodb://'+config.mongoIP+':'+config.mongoPort+'/?maxPoolSize=1', function(err, db) {
     if (err) throw err;
     global.dboriginal=db;
-    global.db = db.db(dbname);
-    global.db.on('close',()=>{
-      console.log("[MONGODB][ERROR]: connection closed");
-      connectToMongo();
-    });
+    global.db = db.db(config.mongoDB);
+    global.db.on('close',()=>connectToMongo());
     loadRoutes();
-    console.log(res);
   });
 }
+connectToMongo();
+
 function getCollectionArray(collection,next,sortby={}){
   if(!collection||!next||!global||!global.db) return;
-  global.db.collection(collection).find(sortby).toArray(function(err, res) {
-    if (err) throw err;
-    if(next) return next(res);
-  });
+  global.db.collection(collection).find(sortby).toArray((err, res)=>documentHandle(err,res,next));
 }
-function insertDocument(target,insert,next){
-  if(insert instanceof Object){
-    global.db.collection(target).insertOne(insert,(err, res)=>{
-      if (err) throw err;
-      if(next) return next(res);
-    });
-  }else if(insert.constructor instanceof Array){
-    global.db.collection(target).insertMany(insert,(err, res)=>{
-      if (err) throw err;
-      if(next) return next(res);
-    });
-  }
+function insertDocument(collection,insert,next){
+  if(insert instanceof Object) return global.db.collection(collection).insertOne(insert,(err, res)=>documentHandle(err,res,next));
+  if(insert.constructor instanceof Array) return global.db.collection(collection).insertMany(insert,(err, res)=>documentHandle(err,res,next));
+  return true;
 }
-
-connectToMongo(true);
+function documentHandle(err,res,next){
+  if (err) throw err;
+  if(next) return next(res);
+  return true;
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
@@ -119,20 +107,42 @@ function permissionGroup(){
 //--------------------------------------------------------------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+function is_valid_email(email){ return /^.+@.+\..+$/.test(email); }
 io.on("connection",(socket)=>clients.push(new userController(socket)));
 function userController(socket){
   this.socket=socket;
-
+  this.session=socket.handshake.session;
   this.socket.on("login",(username,password)=>{
     getCollectionArray("users",(res)=>{
-      if(!res.length) return; //Return socket.io error response
+      if(!res.length) return console.log("not found"); //Return socket.io error response
       this.logged=true;
       this.document=res[0];
       return; //Logged in
-    },{username:username,password:password})
+    },{username:username,password:this.encrypt(password)});
   });
   this.socket.on("register",(username,password,email)=>{
-
+    if(!is_valid_email(email)) return; //Not valid email
+    if(password.length<6) return; //Password under 6 characters.
+    if(!username.length) return; //Not valid username
+    return insertDocument("users",{username:username,password:this.encrypt(password),email:email},(res)=>{
+      this.session.logged=true;
+      this.session.username=username;
+      this.session.email=email;
+      this.session.id=res.insertedId;
+      //Redirect user to front.
+    });
+  });
+  this.socket.on("usernameAvailable",(username)=>{
+    getCollectionArray("users",(res)=>{
+      if(!res.length) return socket.emit("usernameAvailable",true);
+      return socket.emit("usernameAvailable",false);
+    },{username:username});
+  });
+  this.socket.on("emailAvailable",(email)=>{
+    getCollectionArray("users",(res)=>{
+      if(!res.length) return socket.emit("emailAvailable",true);
+      return socket.emit("emailAvailable",false);
+    },{email:email});
   });
 
   //Permission groups*
@@ -149,6 +159,12 @@ function userController(socket){
     console.log("socket disconnected");
     clients.splice(this,1);
   });
+}
+userController.prototype.encrypt=function(password){
+  if(password.length!=64) return;
+  var hash = crypto.createHmac('sha256',config.mongoSecret);
+  hash.update(password.substring(16,48));
+  return hash.digest('hex');
 }
 userController.prototype.updateUI=function(ui){
   var res=this;
