@@ -1,38 +1,65 @@
-div(style="height:100px;width:100%;")
+div(style="height:100px;width:210px;")
+  if session.logged
+    .ui.fluid.card
+      table.ui.large.table
+        tbody
+          tr
+            td(colspan="3")
+              p(style="text-align:center;") This months activity
+          tr.center.aligned
+            td
+              a(data-tooltip="Discussions started",data-inverted="")
+                i.icon.newspaper
+                | 1
+            td
+              a(data-tooltip="Comments made",data-inverted="")
+                i.icon.comment
+                | 42
+            td
+              a(data-tooltip="Likes received",data-inverted="")
+                i.icon.thumbs.up
+                | 33
 .ui.sticky
-  div.ui.card(style="width:200px")
-    if logged
-      .blurring.dimmable
-        .ui.dimmer
-          .content
-            .center
-              .ui.inverted.button View profile
-        img.ui.image(src='/images/elliot.jpg')
-      .content
-        p(style="text-align:center;") This months activity
-        .ui.relaxed.horizontal.list(style="margin-left:15px;")
-          .item
-            a(data-tooltip="Discussions started",data-inverted="")
-              i.icon.newspaper
-              p 1
-          .item
-            a(data-tooltip="Comments made",data-inverted="")
-              i.icon.comment
-              p 42
-          .item
-            a(data-tooltip="Likes received",data-inverted="")
-              i.icon.thumbs.up
-              p 33
-      .extra.content(style="text-align:center;")
-        p Extra content
-      script.
-        $(document).ready(function() {
-          $(".ui.sticky").sticky({offset:80});
-          $('.dimmable').dimmer({
-            on: 'hover'
-          });
-          $('.ui.basic.modal').modal('show');
+  if session.logged
+    .ui.vertical.menu.profileview
+      .item
+        .blurring.dimmable
+          .ui.dimmer
+            .content
+              .center
+                .ui.inverted.button View profile
+          img.ui.image(src='/images/elliot.jpg')
+      a.item
+        i.grid.layout.icon
+        |  Activities
+      a.item
+        i.inbox.icon
+        | Inbox
+      .ui.dropdown.item
+        | Administration
+        i.dropdown.icon
+        .menu
+          a.item
+            i.edit.icon
+            |  Edit Profile
+          a.item
+            i.globe.icon
+            |  Choose Language
+          a.item
+            i.settings.icon
+            |  Account Settings
+      .item
+        .menu
+          a.item Activity Log
+          a.item(href="/logout") Logout
+    script.
+      $(document).ready(function() {
+        $(".ui.sticky").sticky({offset:100,context:"body"});
+        $('.dimmable').dimmer({
+          on: 'hover'
         });
-    else
-      a.ui.positive.button.login(href="/login") Login
-      a.ui.primary.button.register(href="/register") Register
+        $('.ui.basic.modal').modal('show');
+      });
+  else
+    a.ui.positive.button.login(href="/login") Login
+    a.ui.primary.button.register(href="/register") Register

@@ -23,6 +23,11 @@ block Discussions
                 p 32
   else if !directory.category
     p(style="text-align:center;") No discussions posted.
-  if !directory.category
-    p(style="text-align:center;")
-      a.ui.primary.button(href="/createDiscussion?directory="+directory._id.toString()) Start discussion
+  if !directory.category && permissions
+    if permissions[directory._id.toString()]
+      if (permissions[directory._id.toString()]&0x2)==0x2
+        p(style="text-align:center;")
+          a.ui.primary.button(href="/createDiscussion?directory="+directory._id.toString()) Start discussion
+    else if permissions.default && (permissions.default&0x2)==0x2
+      p(style="text-align:center;")
+        a.ui.primary.button(href="/createDiscussion?directory="+directory._id.toString()) Start discussion

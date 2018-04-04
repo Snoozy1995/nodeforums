@@ -1,31 +1,35 @@
 extends layouts/main.pug
 
 block page
+  style.
+    #messagesegment{
+      display:none;
+    }
   .ui.mini.fluid.two.item.menu
     a.item.active(href="/login") Login
     a.item(href="/register") Register
   h1.ui.header Login
-  .ui.inverted.red.segment
-    p Response from server: $$$
+  .ui.inverted.blue.segment#messagesegment
+    p#message
   form.ui.fluid.form
     .field
-      .ui.fluid.icon.input
-        input(placeholder="Username",type="text",id="username",required)
-        i.icon
+      input(placeholder="Username",type="text",id="username",required)
     .ui.divider
     .field
-      .ui.fluid.icon.input
-        input(placeholder="Password",type="password",id="password",autocomplete="current-password",minlength="6",required)
-        i.icon
-      .ui.pointing.label Please enter a value
+      input(placeholder="Password",type="password",id="password",autocomplete="current-password",minlength="6",required)
     .ui.divider
     .field
-      a.ui.fluid.positive.button.loginbutton Login
+      button.ui.fluid.positive.button.loginbutton(type="submit") Login
   script.
-    $(".loginbutton").click(function(){
+    $(".loginbutton").click(function(e){
+      e.preventDefault();
       sha256($('#password').val()).then(function(digest) {
         socket.emit("login",$("#username").val(),digest);
       });
+    });
+    socket.on("loginError",(res)=>{
+      $("#message").html(res);
+      $("#messagesegment").show();
     });
     function sha256(str) {
     var buffer = new TextEncoder("utf-8").encode(str);

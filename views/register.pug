@@ -29,16 +29,13 @@ block page
     function validateInputs(next){
       var valid=true;
       $("input").each(function(){
-        if(this.checkValidity()==false){
-          valid=false;
-          $(this).parent().find(".state").html("<div class='ui pointing red basic label'>"+this.validationMessage+"</div>");
-        }else{
-          $(this).parent().find(".state").html('');
-        }
+        if(this.checkValidity()==false){ valid=false; $(this).parent().find(".state").html("<div class='ui pointing red basic label'>"+this.validationMessage+"</div>");
+        }else{ $(this).parent().find(".state").html(''); }
       });
       return valid;
     }
-    function validateInput(input){
+    function validateInput(input,customState=""){
+      input.setCustomValidity(customState);
       if(input.checkValidity()==false) return $("#"+input.id).parent().find(".state").html("<div class='ui pointing red basic label'>"+input.validationMessage+"</div>");
       return $("#"+input.id).parent().find(".state").html('');
     }
@@ -61,25 +58,25 @@ block page
       if($("#password2").val().length<6||$("#password").val().length<6) return;
       clearTimeout(timers.passSame);
       timers.passSame=setTimeout(()=>{
-        if($("#password").val()==$("#password2").val()){ $("#password2")[0].setCustomValidity(""); }
-        else{ $("#password2")[0].setCustomValidity("Passwords are not matching."); }
-        return validateInput($("#password2")[0]);
+        if($("#password").val()==$("#password2").val()) return validateInput($("#password2")[0]);
+        return validateInput($("#password2")[0],"Passwords are not matching.");
       },500);
     });
     socket.on("usernameAvailable",(res)=>{
-      if(res){ $("#username")[0].setCustomValidity(""); }
-      else{ $("#username")[0].setCustomValidity("Account already registered with username."); }
-      return validateInput($("#username")[0]);
+      if(res) return validateInput($("#username")[0]);
+      return validateInput($("#username")[0],"Account already registered with username.");
     });
     socket.on("emailAvailable",(res)=>{
-      if(res){ $("#email")[0].setCustomValidity(""); }
-      else{ $("#email")[0].setCustomValidity("Account already registered with email."); }
-      return validateInput($("#email")[0]);
+      if(res) return validateInput($("#email")[0]);
+      return validateInput($("#email")[0],"Account already registered with email.");
     });
     $(":submit").click(function(e){
       e.preventDefault();
       var valid=validateInputs();
-      if(valid) return socket.emit("register",$("#username").val(),$("#password").val(),$("#email").val());
+      if(!valid) return;
+      sha256($('#password').val()).then(function(digest) {
+        return socket.emit("register",$("#username").val(),digest,$("#email").val());
+      });
     });
     function sha256(str) { return crypto.subtle.digest("SHA-256",new TextEncoder("utf-8").encode(str)).then((hash)=>{return hex(hash);}); }
     function hex(buffer) {

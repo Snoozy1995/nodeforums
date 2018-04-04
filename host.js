@@ -20,7 +20,7 @@ const   io              = require('socket.io')(http);
 const   fs              = require("fs");
 const   crypto          = require("crypto");
 var sharedsession = require("express-socket.io-session");
-var global={},clients=[];
+var global={},clients=[],permissionGroups={},permissionGroupsArray=[];
 var MongoClient = require('mongodb').MongoClient;
 var store = new MongoDBStore({uri:'mongodb://'+config.mongoIP+':'+config.mongoPort+'/',databaseName:config.mongoDB,collection: 'web_sessions'});
 store.on('error', function(error) { assert.ifError(error); assert.ok(false); });
@@ -37,7 +37,7 @@ app.use(compression());
 app.use(session1);
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'pug');
-io.use(sharedsession(session1,{autoSave:true}));
+io.use(sharedsession(session1));
 function endProcess(err){ console.log(err); process.exit(1); }
 if(!config.mongoIP||!config.mongoPort||!config.mongoDB||!config.session_secret||!config.mongoSecret) return endProcess("Configuration file not properly setup. Please refer to config/config.js");
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -53,6 +53,14 @@ function connectToMongo(){
     global.db = db.db(config.mongoDB);
     global.db.on('close',()=>connectToMongo());
     loadRoutes();
+    getCollectionArray("permission_groups",(res)=>{
+      for(var i=0;i<res.length;i++){
+        var permGroup=new permissionGroup(res[i]);
+        permissionGroups[res[i]._id.toString()]=permGroup;
+        permissionGroupsArray.push(permGroup);
+        if(i+1==res.length) console.log(permissionGroups);
+      }
+    });
   });
 }
 connectToMongo();
@@ -86,19 +94,27 @@ const PERMISSIONS={
 };
 
 function hasPermission(permission,permissions){
+  if((permissions&PERMISSIONS.ADMINISTRATOR)==PERMISSIONS.ADMINISTRATOR) return true;
   if(typeof permission=="number") return ((permissions&permission)==permission)
-  else if(!typeof permission=="string") return false;
+  if(!typeof permission=="string") return false;
   if(!PERMISSIONS[permission]) return;
   return ((permissions&PERMISSIONS[permission])==PERMISSIONS[permission])
 }
 
-function permissionGroup(){
-  this.name;
-  this.permissions;
-  this._id;
-  this.color;
-  this.order;
+function permissionGroup(config={}){
+  this.name=config.name;
+  this.permissions=config.permissions;
+  this._id=config._id;
+  if(config.color) this.color=config.color;
+  if(config.default) this.default=config.default;
   return this;
+}
+
+function getDefaultGroup(){
+  if(!permissionGroupsArray.length) return false;
+  var result=permissionGroupsArray.filter(val=>{ if(val.default) return true; });
+  if(result.length) return result[0];
+  return false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,24 +128,20 @@ io.on("connection",(socket)=>clients.push(new userController(socket)));
 function userController(socket){
   this.socket=socket;
   this.session=socket.handshake.session;
+  if(this.session&&this.session.logged&&this.session.username){ this.loadUser(this.session.username); }
   this.socket.on("login",(username,password)=>{
     getCollectionArray("users",(res)=>{
-      if(!res.length) return console.log("not found"); //Return socket.io error response
-      this.logged=true;
-      this.document=res[0];
-      return; //Logged in
+      if(!res.length) return socket.emit("loginError","The information provided isn't found in our database. Please check your input and try again.");
+      return this.loadUser(username,true,true);
     },{username:username,password:this.encrypt(password)});
   });
   this.socket.on("register",(username,password,email)=>{
     if(!is_valid_email(email)) return; //Not valid email
-    if(password.length<6) return; //Password under 6 characters.
+    if(!password.length) return;
     if(!username.length) return; //Not valid username
-    return insertDocument("users",{username:username,password:this.encrypt(password),email:email},(res)=>{
-      this.session.logged=true;
-      this.session.username=username;
-      this.session.email=email;
-      this.session.id=res.insertedId;
-      //Redirect user to front.
+    insertDocument("users",{username:username,password:this.encrypt(password),email:email,groups:[getDefaultGroup()._id]},(res)=>{
+      if(!res||!res.ops.length) return;
+      return this.loadUser(username,true,true);
     });
   });
   this.socket.on("usernameAvailable",(username)=>{
@@ -155,10 +167,29 @@ function userController(socket){
     this.update_ui[ui]=target;
     if(!this.updateUI(ui)) return;
   });
-  this.socket.on("disconnect",()=>{
-    console.log("socket disconnected");
-    clients.splice(this,1);
-  });
+  this.socket.on("disconnect",()=>this.disconnect());
+}
+userController.prototype.disconnect=function(){
+  clients.splice(this,1);
+}
+userController.prototype.loadUser=function(username,setSession=false,redirect=false){
+  getCollectionArray("users",(res)=>{
+    if(!res.length) return this.session.destroy(function(err){ 
+      if(err) return console.log(err); 
+      this.disconnect();
+      this.socket.emit("redirect","/");
+    });
+    if(setSession){ this.setSession({logged:true,username:username,email:res[0].email,_id:res[0]._id}); }
+    this.groups=res[0].groups;
+    this.getPermissionsTree();
+    //this.permissions=res[0].permissions;
+    if(redirect){ setTimeout(()=>this.socket.emit("redirect","/"),500); }
+  },{username:username});
+}
+userController.prototype.setSession=function(session={}){
+  for(var index in session){ this.session[index]=session[index]; }
+  this.session.save();
+  return this;
 }
 userController.prototype.encrypt=function(password){
   if(password.length!=64) return;
@@ -172,24 +203,42 @@ userController.prototype.updateUI=function(ui){
     case "directoryView":
       return getCollectionArray("directories",(directories)=>{
         new directoryTree(directories,{
-          next:(that)=>app.render("api/"+ui,{directories:that.directories},(err,html)=>res.renderUI(ui,html,err))
+          next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:that.directories},(err,html)=>res.renderUI(ui,html,err)),
+          permissions:res.permissionsTree
         });
       });
     case "childView":
       return getCollectionArray("directories",(directories)=>{
         new directoryTree(directories,{
-          next:(that)=>app.render("api/"+ui,that,(err,html)=>res.renderUI(ui,html,err)),
+          next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:that.directories},(err,html)=>res.renderUI(ui,html,err)),
           loadDiscussions:true,
+          permissions:res.permissionsTree,
           origin:(obj,index,array)=>{ return (obj._id.toString()==res.socket.handshake.query.id); }
         }); 
       });
     case "railProfileView":
-      return app.render("api/"+ui,(err,html)=>res.renderUI(ui,html,err));
+      return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
   }
 }
 userController.prototype.renderUI=function(ui,html,err){
   if(err) return console.log(err);
   return this.socket.emit("update ui",this.update_ui[ui],html);
+}
+userController.prototype.getPermissionsTree=function(){
+  if(!this.groups||!this.groups.length) return;
+  this.permissionsTree={};
+  for(var i=0;i<this.groups.length;i++){
+    for(var keys in permissionGroups[this.groups[i].toString()].permissions){
+      if(this.permissionsTree[keys]){
+        if(this.permissionsTree[keys]<permissionGroups[this.groups[i].toString()].permissions[keys]){
+          this.permissionsTree[keys]=permissionGroups[this.groups[i].toString()].permissions[keys];
+        }
+      }else{
+        this.permissionsTree[keys]=permissionGroups[this.groups[i].toString()].permissions[keys];
+      }
+    }
+  }
+  return this.permissionsTree;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -207,13 +256,16 @@ function directoryTree(directories,config={}){
   if(config.origin) this.origin=config.origin;
 
   if(config.loadDiscussions) this.loadDiscussions=config.loadDiscussions;
+
+  //Contains object with keys containing ids and a default. The permissions from other than default will overrule.
+  if(config.permissions) this.permissions=config.permissions;
   this.startTime=Date.now();
   this.pending=0;
   this.getDirectories(this.origin);
   return this;
 }
 directoryTree.prototype.getDirectories=function(varx=function(obj,index,array){ return (obj.category); }){
-  this.directories=this.directoriesX.filter(varx);
+  this.directories=this.permissionFilter(this.directoriesX.filter(varx));
   this.pendingF(this.directories.length);
   for(var i=0;i<this.directories.length;i++){ 
     if(this.loadDiscussions){
@@ -226,12 +278,20 @@ directoryTree.prototype.getDirectories=function(varx=function(obj,index,array){ 
     this.getChildren(this.directories[i]); 
   }
 }
+directoryTree.prototype.permissionFilter=function(array){
+  if(this.permissions&&array.length){
+    for(var i=array.length-1;i>=0;i--){
+      var perms=this.permissions.default;
+      if(this.permissions[array[i]._id.toString()]) perms=this.permissions[array[i]._id.toString()];
+      if(!hasPermission("READ",perms)){ array.splice(i,1);}
+      if(i==0) return array;
+    }
+  }else return array;
+}
 directoryTree.prototype.getChildren=function(category){
-  var children=this.directoriesX.filter(function(obj,index,array){
-    return (obj.parent==category._id.toString()); 
-  });
-  category.children=children;
-  if(category.children.length){
+  var children=this.permissionFilter(this.directoriesX.filter(function(obj,index,array){ return (obj.parent==category._id.toString()); }));
+  if(children&&children.length){
+    category.children=children;
     this.pendingF(category.children.length);
     for(var i=0;i<category.children.length;i++){
       this.getChildren(category.children[i]);
@@ -289,23 +349,27 @@ function loadRoutes(){
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return res.redirect("/");
       new originController(directories[0]._id,(r)=>{
-        return res.render("directory",{query:req.query,origin:r});
+        return res.render("directory",{session:req.session,query:req.query,origin:r});
       });
     },{_id:ObjectId(req.query.id)});
   });
   app.get(["/login","/register","/"],normalRoute);
+  app.get("/logout",(req,res)=>{
+    req.session.destroy(function(err){ if(err) return console.log(err); });
+    return res.redirect("/");
+  });
   app.get(["/:id"],(req,res)=>{
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return;
       new originController(directories[0]._id,(r)=>{
-        return res.render("directory",{query:req.query,origin:r});
+        return res.render("directory",{session:req.session,query:req.query,origin:r});
       });
     },{_id:ObjectId(req.params.id)});
     getCollectionArray("discussions",(disc)=>{
       if(!disc.length) return;
       new originController(disc[0]._id,(r)=>{
-        return res.render("discussion",{query:req.query,origin:r});
+        return res.render("discussion",{session:req.session,query:req.query,origin:r});
       });
     },{_id:ObjectId(req.params.id)});
   });
@@ -316,5 +380,5 @@ function loadRoutes(){
 function normalRoute(req,res){
   var url="landing";
   if(req.path.length>=2) url=req.path.substring(1);
-  return res.render(url,{query:req.query});
+  return res.render(url,{session:req.session,query:req.query});
 }

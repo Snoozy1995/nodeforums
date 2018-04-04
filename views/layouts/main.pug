@@ -42,7 +42,7 @@ html
         margin: 5em 0em 0em;
         padding: 5em 0em;
       }
-      #container{
+      #container,#MainContainer,.rail{
         min-height:600px;
       }
     block meta
@@ -64,6 +64,7 @@ html
         $('.main.menu  .ui.dropdown').dropdown({
           on: 'hover'
         });
+        socket.on("redirect",(url)=>window.location.href=url);
         socket.on("update ui",(ui,data)=>$(ui).html(data));
         socket.emit("register ui","railProfileView",".ui.left.small.attached.rail");
       });
@@ -78,8 +79,7 @@ html
           if !logged
             a.item(href="/login")
               i.user.icon
-          a.ui.dropdown.item(tabindex='0')
-            | Original
+          a.ui.dropdown.item(tabindex='0') Original
             i.dropdown.icon
             .menu(tabindex='-1')
               .item Latest
@@ -88,7 +88,7 @@ html
             .ui.small.icon.input
               input(placeholder='Search...', type='text')
               i.search.icon
-      .ui.text.container
+      #MainContainer.ui.text.container
         div
           .ui.small.breadcrumb
             if origin && origin.length
