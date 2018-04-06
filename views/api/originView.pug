@@ -1,0 +1,5 @@
+if origin && origin.length
+  a.section.ajax(href="http://127.0.0.1/",data-href="",data-ui="directoryView",data-target=".primaryView") Forums
+  - for(var i=0;i<origin.length;i++)
+    i.icon.right.chevron.divider
+    a.section.ajax(href="http://127.0.0.1/"+origin[i]._id.toString(),data-href=origin[i]._id.toString(),data-ui="childView",data-target=".primaryView") #{origin[i].name}

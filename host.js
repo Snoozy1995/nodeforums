@@ -59,7 +59,6 @@ function connectToMongo(){
         var permGroup=new permissionGroup(res[i]);
         permissionGroups[res[i]._id.toString()]=permGroup;
         permissionGroupsArray.push(permGroup);
-        if(i+1==res.length) console.log(permissionGroups);
       }
     });
   });
@@ -93,7 +92,7 @@ function documentHandle(err,res,next){
 const PERMISSIONS={
   READ:0x1,
   WRITE:0x2,
-  MANAGE_MESSAGES:0x4,
+  MODERATOR:0x4,
   ADMINISTRATOR:0x8
 };
 
@@ -133,6 +132,8 @@ function userController(socket){
   this.socket=socket;
   this.session=socket.handshake.session;
   if(this.session&&this.session.logged&&this.session.username){ this.loadUser(this.session.username); }
+  this.update_ui={};
+  this.socket.on("pong1",()=>console.log("Socket ping: "+(Date.now()-this.pingVal)+"ms"));
   this.socket.on("login",(username,password)=>{
     getCollectionArray("users",(res)=>{
       if(!res.length) return socket.emit("loginError","The information provided isn't found in our database. Please check your input and try again.");
@@ -160,33 +161,83 @@ function userController(socket){
       return socket.emit("emailAvailable",false);
     },{findBy:{email:email}});
   });
-
   this.socket.on("createcomment",(disc,comt)=>this.createComment(disc,comt));
   this.socket.on("creatediscussion",(directory,name,text)=>this.createDiscussion(directory,name,text));
   this.socket.on("likecomment",(comment)=>{});
   this.socket.on("likediscussion",(discussion)=>{});
-
-  this.update_ui={};
-  this.socket.on("register ui",(ui,target)=>{
-    this.update_ui[ui]=target;
-    if(!this.updateUI(ui)) return;
-  });
+  this.socket.on("register ui",(ui,target,config)=>this.registerUI(ui,target,config));
+  this.socket.on("unregister ui",(ui)=>this.unregisterUI(ui));
   this.socket.on("disconnect",()=>this.disconnect());
+  if(this.socket.handshake.query.id) this.pageid=this.socket.handshake.query.id;
+  this.ping();
+  return this;
+}
+userController.prototype.unregisterUI=function(ui){
+  //Should check beforehand if target is taken, if it is then remove it.
+  if(this.update_ui&&this.update_ui[ui]){
+    this.renderUI(ui,"");
+    setTimeout(()=>{
+      delete this.update_ui[ui];
+    },250)
+  }
+  return this;
+}
+userController.prototype.registerUI=function(ui,target,config={}){
+  //Should check beforehand if target is taken, if it is then remove it.
+  var len=Object.keys(this.update_ui).length;
+  if(config.pageid!=undefined){ this.pageid=config.pageid; }
+  if(config.pushstate!=undefined){
+    this.pageid=config.pushstate;
+    //Should check current url, if same url then dont.*
+    this.socket.emit("pushstate","/"+config.pushstate,{ui:ui,target:target,id:this.pageid});
+    this.updateUI("originView");
+  }
+  if(!len){
+    this.update_ui[ui]=target;
+    this.updateUI(ui);
+    return this;
+  }
+  var i=0;
+  for(var obj in this.update_ui){
+    i++
+    if(this.update_ui[obj]==target&&obj!=ui){ delete this.update_ui[obj]; }
+    if(i==len){
+      this.update_ui[ui]=target;
+      this.updateUI(ui);
+      return this;
+    }
+  }
+}
+userController.prototype.ping=function(){
+  this.pingVal=Date.now();
+  this.socket.emit("ping1");
+  return this;
+}
+userController.prototype.hasPermission=function(permission,id){
+  if(!this.permissionsTree) return false;
+  if(hasPermission(PERMISSIONS.ADMINISTRATOR,this.permissionsTree.default)) return true;
+  if(this.permissionsTree[id]){ 
+    if(hasPermission(PERMISSIONS.ADMINISTRATOR,this.permissionsTree[id])||hasPermission(permission,this.permissionsTree[id])) return true;
+    else return false;
+  }else return hasPermission(permission,this.permissionsTree.default);
 }
 userController.prototype.createDiscussion=function(directory,name,text){
+  if(!this.hasPermission(PERMISSIONS.WRITE,directory)) return;
   insertDocument("discussions",{directory:ObjectId(directory),name:name,text:text,created:moment().format(),author:this.session._id},()=>{
+    //this.registerUI("childView",".primaryView");
     this.socket.emit("redirect","/"+directory);
   });
   return this;
 }
 userController.prototype.createComment=function(discussion,comment,parent){
+  if(!this.hasPermission(PERMISSIONS.WRITE,discussion)) return;
   var insert={discussion:ObjectId(discussion),text:comment,created:moment().format(),author:this.session._id};
   if(parent){ insert.parent=parent; }
-  insertDocument("discussions",insert,(res)=>{ this.updateUIALL(); });
+  insertDocument("discussions",insert,(res)=>{ this.updateUI("discussionView"); });
   return this;
 }
-userController.prototype.disconnect=function(){
-  clients.splice(this,1);
+userController.prototype.disconnect=function(){ 
+  clients.splice(this,1); 
 }
 userController.prototype.loadUser=function(username,setSession=false,redirect=false){
   getCollectionArray("users",(res)=>{
@@ -222,7 +273,6 @@ userController.prototype.updateUI=function(ui){
   var res=this;
   switch(ui){
     case "discussionView":
-      console.log(res.socket.handshake.query.id);
       return getCollectionArray("discussions",(result)=>{
         if(!result.length) return console.log("This should be handled error getting discussionView @ userController.updateUI");
         new discussionTree(result[0],{
@@ -230,7 +280,7 @@ userController.prototype.updateUI=function(ui){
           //permissions:res.permissionsTree
 
         });
-      },{findBy:{_id:ObjectId(res.socket.handshake.query.id)}});
+      },{findBy:{_id:ObjectId(this.pageid)}});
     case "directoryView":
       return getCollectionArray("directories",(directories)=>{
         new directoryTree(directories,{
@@ -244,11 +294,15 @@ userController.prototype.updateUI=function(ui){
           next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:that.directories,discussions:that.discussions},(err,html)=>res.renderUI(ui,html,err)),
           loadDiscussions:true,
           permissions:res.permissionsTree,
-          origin:(obj,index,array)=>{ return (obj._id.toString()==res.socket.handshake.query.id); }
+          origin:(obj,index,array)=>{ return (obj._id.toString()==res.pageid); }
         }); 
       });
     case "railProfileView":
       return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
+    case "originView":
+      return new originController(this.pageid,(r)=>{
+        app.render("api/"+ui,{origin:r},(err,html)=>res.renderUI(ui,html,err));
+      });
   }
 }
 userController.prototype.renderUI=function(ui,html,err){
@@ -297,7 +351,6 @@ function discussionTree(discussion,config={}){
 discussionTree.prototype.getComments=function(varx=function(obj,index,array){ return (!obj.directory); }){
   getCollectionArray("discussions",(res)=>{
     this.comments=res;
-    console.log(this.comments);
     if(!this.comments.length) return this.pendingF();
     this.commentsArray=this.comments.filter(varx);
     this.pendingF(this.commentsArray.length);
@@ -319,7 +372,6 @@ discussionTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
   getCollectionArray("users",(res)=>{
     if(res&&res.length){
-      console.log(res);
       comment.author=res[0];
       this.pendingF();
     }
@@ -431,16 +483,19 @@ directoryTree.prototype.pendingF=function(increase=-1){
 //Used to create the backlink from current directory.
 //Should be able to support discussions.
 function originController(id,next,config={}){
+  if(!id||id.length=="") return next([]);
   this.next=next;
   this.endArray=[];
-  if(config.discussion){
-    this.endArray.unshift(id);
-    id=id.directory;
-  }
-  getCollectionArray("directories",(directories)=>{
-    this.directories=directories;
-    this.testX(id);
-  });
+  getCollectionArray("discussions",(disc)=>{
+    if(disc.length){
+      this.endArray.unshift(disc[0]);
+      id=disc[0].directory;
+    }
+    getCollectionArray("directories",(directories)=>{
+      this.directories=directories;
+      this.testX(id);
+    });
+  },{findBy:{_id:ObjectId(id)}});
 }
 originController.prototype.testX=function(id){
   for(var i=0;i<this.directories.length;i++){
@@ -471,24 +526,18 @@ function loadRoutes(){
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return res.redirect("/");
-      new originController(directories[0]._id,(r)=>{
-        return res.render("createDiscussion",{session:req.session,params:req.params,origin:r});
-      });
+      return res.render("createDiscussion",{session:req.session,params:req.params});
     },{findBy:{_id:ObjectId(req.params.id)}});
   });
   app.get("/:id",(req,res)=>{
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
     getCollectionArray("directories",(directories)=>{
       if(!directories.length) return;
-      new originController(directories[0]._id,(r)=>{
-        return res.render("directory",{session:req.session,query:req.query,origin:r});
-      });
+      return res.render("directory",{session:req.session,query:req.query});
     },{findBy:{_id:ObjectId(req.params.id)}});
     getCollectionArray("discussions",(disc)=>{
       if(!disc.length) return;
-      new originController(disc[0],(r)=>{
-        return res.render("discussion",{session:req.session,query:req.query,origin:r});
-      },{discussion:true});
+      return res.render("discussion",{session:req.session,query:req.query});
     },{findBy:{_id:ObjectId(req.params.id)}});
   });
   app.get("/*",(req,res)=>res.redirect("/"));

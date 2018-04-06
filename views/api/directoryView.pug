@@ -1,6 +1,6 @@
 if directories && directories.length
   each directory in directories
-    a(href='/'+directory._id.toString()).ui.horizontal.divider.header #{directory.name}
+    a.ajax(href='/'+directory._id.toString(),data-href=directory._id.toString(),data-ui="childView",data-target=".primaryView").ui.horizontal.divider.header #{directory.name}
     .ui.items
       if directory.children && directory.children.length
         - var bam=0;
@@ -13,21 +13,21 @@ if directories && directories.length
               i.icon.folder.open.outline.link(style="font-size:3em;")
             .middle.aligned.content
               h3.ui.header
-                a(href="/"+child._id.toString()) #{child.name}
+                a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.name}
                 if child.description || child.children && child.children.length
                   .sub.header 
                     if child.description
-                      a(href="/"+child._id.toString()) #{child.description}
+                      a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.description}
                     if child.children && child.children.length
                       each child2 in child.children
-                        a(href="/"+child2._id.toString())
+                        a.ajax(href="/"+child2._id.toString(),data-href=child2._id.toString(),data-ui="childView",data-target=".primaryView")
                           i.icon.folder.outline.link
                           | #{child2.name}
             .ui.right.floated
               .content
                 if child.latest
                   .meta
-                    a #{child.latest.name}
+                    a.ajax(data-href=child.latest._id.toString(),data-ui="childView",data-target=".primaryView") #{child.latest.name}
                     | by 
                     a Somebody
       block Discussions

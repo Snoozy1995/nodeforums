@@ -26,17 +26,27 @@ if discussion && discussion.name
               if comment.created
                 span.date #{comment.created}
             .text #{comment.text}
-  form.ui.reply.form
-    .field
-      textarea.replyarea
-    .ui.blue.labeled.submit.icon.button
-      i.icon.edit
-      |  Add Reply
-  script.
-    $( ".date" ).each(function( index ) {
-      $(this).html(moment($(this).html()).fromNow());
-    });
-    $(".submit").click(function(e){
-      e.preventDefault();
-      socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
-    });
+  if permissions
+    if permissions[discussion._id.toString()] || permissions.default
+      if (permissions[discussion._id.toString()]&0x2)==0x2 || (permissions.default&0x2)==0x2
+        form.ui.reply.form
+          .field
+            textarea(minlength="2").replyarea
+          .ui.blue.labeled.submit.icon.button
+            i.icon.edit
+            |  Add Reply
+        script.
+          $( ".date" ).each(function( index ) {
+            $(this).html(moment($(this).html()).fromNow());
+          });
+          $("textarea").keydown(function(e){
+            if ((e.ctrlKey || e.metaKey) && (e.keyCode == 13 || e.keyCode == 10)) {
+              if($(".replyarea").val().length<2) return;
+              socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
+            }
+          });
+          $(".submit").click(function(e){
+            e.preventDefault();
+            if($(".replyarea").val().length<2) return;
+            socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
+          });

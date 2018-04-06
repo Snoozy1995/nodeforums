@@ -9,11 +9,11 @@ block Discussions
         .content
           a
             img.left.floated.ui.mini.spaced.rounded.image(src="/images/elliot.jpg")
-          a(href="/"+disc._id.toString())
+          a.ajax(href="/"+disc._id.toString(),data-href=disc._id.toString(),data-ui="discussionView",data-target=".primaryView")
             h3.ui.header
               | #{disc.name}
               .sub.header Test description
-        a(href="/"+disc._id.toString())
+        a.ajax(href="/"+disc._id.toString(),data-href=disc._id.toString(),data-ui="discussionView",data-target=".primaryView")
           .ui.right.floated.horizontal.list
             .item
               i.icon.comment.link
@@ -24,10 +24,7 @@ block Discussions
   else if !directory.category
     p(style="text-align:center;") No discussions posted.
   if !directory.category && permissions
-    if permissions[directory._id.toString()]
-      if (permissions[directory._id.toString()]&0x2)==0x2
+    if permissions[directory._id.toString()] || permissions.default
+      if (permissions[directory._id.toString()]&0x2)==0x2 || (permissions.default&0x2)==0x2
         p(style="text-align:center;")
           a.ui.primary.button(href="/"+directory._id.toString()+"/create") Start discussion
-    else if permissions.default && (permissions.default&0x2)==0x2
-      p(style="text-align:center;")
-        a.ui.primary.button(href="/"+directory._id.toString()+"/create") Start discussion

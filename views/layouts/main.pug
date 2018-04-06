@@ -63,11 +63,24 @@ html
         });
         // show dropdown on hover
         $('.main.menu  .ui.dropdown').dropdown({
-          on: 'hover'
+          on: 'click'
         });
         socket.on("redirect",(url)=>window.location.href=url);
         socket.on("update ui",(ui,data)=>$(ui).html(data));
+        socket.on("ping1",function(){ this.emit("pong1"); });
+        socket.on("pushstate",(url,state)=>{
+         window.history.pushState(state,"",url);
+        });
+        window.onpopstate = function(event) {
+          console.log(event);
+          if(event.state){ socket.emit("register ui",event.state.ui,event.state.target,{pageid:event.state.id}); }
+        };
         socket.emit("register ui","railProfileView",".ui.left.small.attached.rail");
+        $(document).on("click",".ajax",function(e){
+          e.preventDefault();
+          socket.emit("register ui",$(this).attr("data-ui"),$(this).attr("data-target"),{pushstate:$(this).attr("data-href")});
+        });
+        socket.emit("register ui","originView",".originView");
       });
     #container
       .ui.main.text.container
@@ -78,7 +91,7 @@ html
           a(href="http://127.0.0.1/").item
             i.home.icon
           if !logged
-            a.item(href="/login")
+            a.item(href="http://127.0.0.1/login")
               i.user.icon
           a.ui.dropdown.item(tabindex='0') Original
             i.dropdown.icon
@@ -91,12 +104,7 @@ html
               i.search.icon
       #MainContainer.ui.text.container
         div
-          .ui.small.breadcrumb
-            if origin && origin.length
-              a.section(href="/") Forums
-              - for(var i=0;i<origin.length;i++)
-                i.icon.right.chevron.divider
-                a.section(href="/"+origin[i]._id.toString()) #{origin[i].name}
+          .ui.small.breadcrumb.originView
         .ui.vertical.segment
           .ui.left.small.attached.rail
             block leftRail
