@@ -69,7 +69,7 @@ html
         socket.on("update ui",(ui,data)=>{
           $(ui).html(data);
         });
-        socket.on("ping1",function(){ this.emit("pong1"); });
+        socket.on("ping1",function(){ this.emit("pong1",Date.now()); });
         socket.on("pushstate",(url,state)=>{
          window.history.pushState(state,"",url);
         });
@@ -82,7 +82,7 @@ html
           socket.emit("register ui",$(this).attr("data-ui"),$(this).attr("data-target"),{pushstate:$(this).attr("data-href")});
         });
         socket.emit("register ui","originView",".originView");
-        socket.emit("register ui","threeStatistics",".footerStatisticsView");
+        socket.emit("register ui","threeStatistics",".footerView");
       });
     #container
       .ui.main.container
@@ -114,7 +114,7 @@ html
             block rightRail
           block page
     .ui.inverted.vertical.footer.segment
-      .ui.center.aligned.container.footerStatisticsView
+      .ui.center.aligned.container.footerView
         .ui.inverted.section.divider
         //img.ui.centered.mini.image(src='assets/images/logo.png')
         .ui.horizontal.inverted.small.divided.link.list

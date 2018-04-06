@@ -1,5 +1,5 @@
 /*process.on('uncaughtException', function (err) {
-console.log(err); //Send some notification about the error
+LOG(err); //Send some notification about the error
 process.exit(1); });*/
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
@@ -39,7 +39,8 @@ app.use(session1);
 app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'pug');
 io.use(sharedsession(session1));
-function endProcess(err){ console.log(err); process.exit(1); }
+function endProcess(err){ LOG(err); process.exit(1); }
+var LOG = function(){ if(config.debug) return console.log.apply(console, arguments); }
 if(!config.mongoIP||!config.mongoPort||!config.mongoDB||!config.session_secret||!config.mongoSecret) return endProcess("Configuration file not properly setup. Please refer to config/config.js");
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
@@ -64,6 +65,7 @@ function connectToMongo(){
     getCollectionArray("discussions",(resx)=>{
       global.discussions=resx;
     },{findBy:{directory:{$exists:true}},count:true});
+    global.directoryTree=new directoryTree();
   });
 }
 connectToMongo();
@@ -150,7 +152,8 @@ function userController(socket){
   this.session=socket.handshake.session;
   if(this.session&&this.session.logged&&this.session.username){ this.loadUser(this.session.username); }
   this.update_ui={};
-  this.socket.on("pong1",()=>console.log("Socket ping: "+(Date.now()-this.pingVal)+"ms"));
+  this.socket.on("pong1",(r)=>LOG("Socket ping:",(r-this.pingVal)+"ms request",(Date.now()-r)+"ms response",(Date.now()-this.pingVal)+"ms total"));
+  this.socket.on("ping1",()=>this.ping());
   this.socket.on("login",(username,password)=>{
     getCollectionArray("users",(res)=>{
       if(!res.length) return socket.emit("loginError","The information provided isn't found in our database. Please check your input and try again.");
@@ -186,7 +189,6 @@ function userController(socket){
   this.socket.on("unregister ui",(ui)=>this.unregisterUI(ui));
   this.socket.on("disconnect",()=>this.disconnect());
   if(this.socket.handshake.query.id) this.pageid=this.socket.handshake.query.id;
-  this.ping();
   return this;
 }
 userController.prototype.unregisterUI=function(ui){
@@ -217,7 +219,7 @@ userController.prototype.registerUI=function(ui,target,config={}){
   var i=0;
   for(var obj in this.update_ui){
     i++
-    if(this.update_ui[obj]==target&&obj!=ui){ delete this.update_ui[obj]; }
+    if(this.update_ui[obj]==target&&obj!=ui||obj==ui&&this.update_ui[obj]!=target){ this.unregisterUI(obj); }
     if(i==len){
       this.update_ui[ui]=target;
       this.updateUI(ui);
@@ -242,6 +244,8 @@ userController.prototype.createDiscussion=function(directory,name,text){
   if(!this.hasPermission(PERMISSIONS.WRITE,directory)) return;
   insertDocument("discussions",{directory:ObjectId(directory),name:name,text:text,created:moment().format(),author:this.session._id},(res)=>{
     if(!res.insertedId) return;
+    if(global.directoryTree.directories[directory]&&!global.directoryTree.directories[directory].discussions){ global.directoryTree.directories[directory].discussions=[]; }
+    global.directoryTree.directories[directory].discussions.unshift(res.ops[0]);
     global.discussions++;
     this.socket.emit("redirect","/"+res.insertedId.toString());
     clients_update(directory,"threeStatistics");
@@ -262,7 +266,7 @@ userController.prototype.disconnect=function(){
 userController.prototype.loadUser=function(username,setSession=false,redirect=false){
   getCollectionArray("users",(res)=>{
     if(!res.length) return this.session.destroy(function(err){ 
-      if(err) return console.log(err); 
+      if(err) return LOG(err); 
       this.disconnect();
       this.socket.emit("redirect","/");
     });
@@ -294,7 +298,7 @@ userController.prototype.updateUI=function(ui){
   switch(ui){
     case "discussionView":
       return getCollectionArray("discussions",(result)=>{
-        if(!result.length) return console.log("This should be handled error getting discussionView @ userController.updateUI");
+        if(!result.length) return LOG("This should be handled error getting discussionView @ userController.updateUI");
         new discussionTree(result[0],{
           next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,discussion:that.discussion,comments:that.commentsArray},(err,html)=>res.renderUI(ui,html,err)),
           //permissions:res.permissionsTree
@@ -302,21 +306,10 @@ userController.prototype.updateUI=function(ui){
         });
       },{findBy:{_id:ObjectId(this.pageid)}});
     case "directoryView":
-      return getCollectionArray("directories",(directories)=>{
-        new directoryTree(directories,{
-          next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:that.directories},(err,html)=>res.renderUI(ui,html,err)),
-          permissions:res.permissionsTree
-        });
-      });
+      return app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:global.directoryTree.categories},(err,html)=>res.renderUI(ui,html,err));
+        //  permissions:this.permissionsTree
     case "childView":
-      return getCollectionArray("directories",(directories)=>{
-        new directoryTree(directories,{
-          next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:that.directories,discussions:that.discussions},(err,html)=>res.renderUI(ui,html,err)),
-          loadDiscussions:true,
-          permissions:res.permissionsTree,
-          origin:(obj,index,array)=>{ return (obj._id.toString()==res.pageid); }
-        }); 
-      });
+      return app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:[global.directoryTree.directories[this.pageid]]},(err,html)=>res.renderUI(ui,html,err));
     case "railProfileView": return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
     case "threeStatistics": return app.render("api/"+ui,{statistics:{online:clients.length,discussions:global.discussions}},(err,html)=>res.renderUI(ui,html,err));
     case "originView":
@@ -326,7 +319,7 @@ userController.prototype.updateUI=function(ui){
   }
 }
 userController.prototype.renderUI=function(ui,html,err){
-  if(err) return console.log(err);
+  if(err) return LOG(err);
   return this.socket.emit("update ui",this.update_ui[ui],html);
 }
 userController.prototype.getPermissionsTree=function(){
@@ -410,7 +403,7 @@ discussionTree.prototype.permissionFilter=function(array){
 discussionTree.prototype.pendingF=function(increase=-1){
   this.pending+=increase;
   if(this.pending<=0){
-    console.log("Time taken loading discussionTree:",(Date.now()-this.startTime));
+    LOG("Time taken loading discussionTree:",(Date.now()-this.startTime));
     if(this.next) this.next(this);
   }
 }
@@ -421,23 +414,47 @@ discussionTree.prototype.pendingF=function(increase=-1){
 //--------------------------------------------------------------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-function directoryTree(directories,config={}){
-  if(!directories) return;
-  this.directoriesX=directories;
-  //config.next -> function that will be emitted once done. Will return the directoryTree.
-  if(config.next) this.next=config.next;
-  //config.origin -> can contain first sorting parameter function for filter if wished to load from something else than upper view, for example a child directory.
-  if(config.origin) this.origin=config.origin;
+function directoryTree(config={}){
+  getCollectionArray("directories",(rex)=>{
+    if(!rex||!rex.length) return;
+    this.directories={};
+    this.directoriesEx=rex;
+    this.categories=rex.filter((val,index,array)=>{ return val.category; });
+    for(var i=0;i<rex.length;i++){
+      this.directories[rex[i]._id.toString()]=rex[i];
+    }
+    for(var x=0;x<this.categories.length;x++){
+      this.getChildren(this.categories[x],true);
+    }
+  });
 
-  if(config.loadDiscussions) this.loadDiscussions=config.loadDiscussions;
-
+  //Rewrite config.permissions;
   //Contains object with keys containing ids and a default. The permissions from other than default will overrule.
   if(config.permissions) this.permissions=config.permissions;
 
   this.startTime=Date.now();
   this.pending=0;
-  this.getDirectories(this.origin);
+  //this.getDirectories(this.origin);
   return this;
+}
+directoryTree.prototype.getChildren=function(category,first=false){
+  var children=this.permissionFilter(this.directoriesEx.filter(function(obj,index,array){ return (obj.parent==category._id.toString()); })); //@tostringremove
+  if(children&&children.length){
+    category.children=children;
+    this.pendingF(category.children.length);
+    if(!first){
+      this.pendingF(1);
+      getCollectionArray("discussions",(res)=>{
+        category.discussions=res;
+        this.pendingF();
+      },{findBy:{directory:category._id},sortBy:{created:-1},limit:50});
+    }
+    for(var i=0;i<category.children.length;i++){
+      this.findLatestDiscussion(category.children[i]);
+      this.getChildren(category.children[i]);
+      this.pendingF();
+    }
+  }
 }
 directoryTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
@@ -448,22 +465,6 @@ directoryTree.prototype.retrieveUser=function(comment){
     }
   },{findBy:{_id:comment.author}});
 }
-directoryTree.prototype.getDirectories=function(varx=function(obj,index,array){ return (obj.category); }){
-  this.directories=this.permissionFilter(this.directoriesX.filter(varx));
-  this.pendingF(this.directories.length);
-  for(var i=0;i<this.directories.length;i++){
-    if(this.origin) this.findLatestDiscussion(this.directories[i]);
-    if(this.loadDiscussions){
-      this.pendingF(1);
-      getCollectionArray("discussions",(res)=>{
-        this.discussions=res;
-        this.pendingF();
-      },{findBy:{directory:this.directories[i]._id},sortBy:{created:-1}});
-    }
-    this.getChildren(this.directories[i]); 
-  }
-}
-
 //Needs some rewriting to support comments too, also needs to compare the latest comment against the latest discussion to see which is newest.
 directoryTree.prototype.findLatestDiscussion=function(directory){
   this.pendingF(1);
@@ -487,23 +488,11 @@ directoryTree.prototype.permissionFilter=function(array){
     }
   }else return array;
 }
-directoryTree.prototype.getChildren=function(category){
-  var children=this.permissionFilter(this.directoriesX.filter(function(obj,index,array){ return (obj.parent==category._id.toString()); }));
-  if(children&&children.length){
-    category.children=children;
-    this.pendingF(category.children.length);
-    for(var i=0;i<category.children.length;i++){
-      this.findLatestDiscussion(category.children[i]);
-      this.getChildren(category.children[i]);
-    }
-  }
-  this.pendingF();
-}
 directoryTree.prototype.pendingF=function(increase=-1){
   this.pending+=increase;
   if(!this.pending){
-    console.log("Time taken loading directoryTree:",(Date.now()-this.startTime));
-    if(this.next) this.next(this);
+    LOG("Time taken loading directoryTree:",(Date.now()-this.startTime));
+    //if(this.next) this.next(this);
   }
 }
 
@@ -519,6 +508,7 @@ directoryTree.prototype.pendingF=function(increase=-1){
 function originController(id,next,config={}){
   if(!id||id.length=="") return next([]);
   if(id.includes("/create")){ id=id.replace("/create",""); }
+  if(id.length!=24) return next([]);
   this.next=next;
   this.endArray=[];
   getCollectionArray("discussions",(disc)=>{
@@ -554,7 +544,7 @@ originController.prototype.testX=function(id){
 function loadRoutes(){
   app.get(["/login","/register","/"],normalRoute);
   app.get("/logout",(req,res)=>{
-    req.session.destroy(function(err){ if(err) return console.log(err); });
+    req.session.destroy(function(err){ if(err) return LOG(err); });
     return res.redirect("/");
   });
   app.get("/:id/create",(req,res)=>{

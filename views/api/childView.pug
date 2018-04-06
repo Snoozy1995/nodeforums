@@ -1,7 +1,7 @@
 extends directoryView.pug
 block Discussions
-  if discussions && discussions.length
-    each disc in discussions
+  if directory.discussions && directory.discussions.length
+    each disc in directory.discussions
       .item
         .content
           a
@@ -9,7 +9,7 @@ block Discussions
           a.ajax(href="/"+disc._id.toString(),data-href=disc._id.toString(),data-ui="discussionView",data-target=".primaryView")
             h3.ui.header
               | #{disc.name}
-              .sub.header #{disc.text}
+              .sub.header #{disc.text.substring(0,150)}...
         a.ajax(href="/"+disc._id.toString(),data-href=disc._id.toString(),data-ui="discussionView",data-target=".primaryView")
           .ui.right.floated.horizontal.list
             .item
