@@ -22,34 +22,34 @@
 
 **Objects:**
 
-* permissionGroup
-* userController(socket)
-  * .updateUI
-  * .updateUIALL
-  * .renderUI
-  * .getPermissionsTree
-  * .encrypt
-  * .setSession
-  * .loadUser
-  * .disconnect
-  * .createComment
-  * .createDiscussion
-  * .hasPermission
-  * .ping
-  * .registerUI
-  * .unregisterUI
-  * Events:
-    * Test
-* discussionTree
-  * .getComments
-  * .retrieveUser
-  * .permissionFilter
-  * .pendingF
-* directoryTree(directories,config={})
-  * .getChildren
-  * .retrieveUser
-  * .findLatestDiscussion
-  * .permissionFilter
-  * .pendingF
-* originController
-  * .testX
+  * permissionGroup
+  * userController(socket)
+    * .updateUI
+    * .updateUIALL
+    * .renderUI
+    * .getPermissionsTree
+    * .encrypt
+    * .setSession
+    * .loadUser
+    * .disconnect
+    * .createComment
+    * .createDiscussion
+    * .hasPermission
+    * .ping
+    * .registerUI
+    * .unregisterUI
+    * Events:
+      * Test
+  * discussionTree
+    * .getComments
+    * .retrieveUser
+    * .permissionFilter
+    * .pendingF
+  * directoryTree(directories,config={})
+    * .getChildren
+    * .retrieveUser
+    * .findLatestDiscussion
+    * .permissionFilter
+    * .pendingF
+  * originController
+    * .testX
