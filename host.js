@@ -61,6 +61,9 @@ function connectToMongo(){
         permissionGroupsArray.push(permGroup);
       }
     });
+    getCollectionArray("discussions",(resx)=>{
+      global.discussions=resx;
+    },{findBy:{directory:{$exists:true}},count:true});
   });
 }
 connectToMongo();
@@ -70,7 +73,11 @@ function getCollectionArray(collection,next,options={}){
   var res=global.db.collection(collection).find(options.findBy);
   if(options.sortBy){ res.sort(options.sortBy); }
   if(options.limit){ res.limit(options.limit); }
-  res.toArray((err, res)=>documentHandle(err,res,next));
+  if(options.count){
+    res.count((e,r)=>documentHandle(e,r,next));
+  }else{
+    res.toArray((err, res)=>documentHandle(err,res,next));
+  }
 }
 function insertDocument(collection,insert,next){
   if(insert instanceof Object) return global.db.collection(collection).insertOne(insert,(err, res)=>documentHandle(err,res,next));
@@ -118,6 +125,16 @@ function getDefaultGroup(){
   var result=permissionGroupsArray.filter(val=>{ if(val.default) return true; });
   if(result.length) return result[0];
   return false;
+}
+
+//Maybe rewrite to use userController.prototype.updateUIALL();
+function clients_update(id,ui){
+  for(var i=0;i<clients.length;i++){
+    var client=clients[i];
+    if(client.pageid!=id) continue;
+    if(ui){ client.updateUI(ui); }
+    else{ client.updateUIALL(); }
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,9 +240,12 @@ userController.prototype.hasPermission=function(permission,id){
 }
 userController.prototype.createDiscussion=function(directory,name,text){
   if(!this.hasPermission(PERMISSIONS.WRITE,directory)) return;
-  insertDocument("discussions",{directory:ObjectId(directory),name:name,text:text,created:moment().format(),author:this.session._id},()=>{
-    //this.registerUI("childView",".primaryView");
-    this.socket.emit("redirect","/"+directory);
+  insertDocument("discussions",{directory:ObjectId(directory),name:name,text:text,created:moment().format(),author:this.session._id},(res)=>{
+    if(!res.insertedId) return;
+    global.discussions++;
+    this.socket.emit("redirect","/"+res.insertedId.toString());
+    clients_update(directory,"threeStatistics");
+    clients_update(directory,"childView");
   });
   return this;
 }
@@ -233,7 +253,7 @@ userController.prototype.createComment=function(discussion,comment,parent){
   if(!this.hasPermission(PERMISSIONS.WRITE,discussion)) return;
   var insert={discussion:ObjectId(discussion),text:comment,created:moment().format(),author:this.session._id};
   if(parent){ insert.parent=parent; }
-  insertDocument("discussions",insert,(res)=>{ this.updateUI("discussionView"); });
+  insertDocument("discussions",insert,(res)=>{ clients_update(discussion,"discussionView"); });
   return this;
 }
 userController.prototype.disconnect=function(){ 
@@ -297,8 +317,8 @@ userController.prototype.updateUI=function(ui){
           origin:(obj,index,array)=>{ return (obj._id.toString()==res.pageid); }
         }); 
       });
-    case "railProfileView":
-      return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
+    case "railProfileView": return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
+    case "threeStatistics": return app.render("api/"+ui,{statistics:{online:clients.length,discussions:global.discussions}},(err,html)=>res.renderUI(ui,html,err));
     case "originView":
       return new originController(this.pageid,(r)=>{
         app.render("api/"+ui,{origin:r},(err,html)=>res.renderUI(ui,html,err));
@@ -419,6 +439,15 @@ function directoryTree(directories,config={}){
   this.getDirectories(this.origin);
   return this;
 }
+directoryTree.prototype.retrieveUser=function(comment){
+  this.pendingF(1);
+  getCollectionArray("users",(res)=>{
+    if(res&&res.length){
+      comment.author=res[0];
+      this.pendingF();
+    }
+  },{findBy:{_id:comment.author}});
+}
 directoryTree.prototype.getDirectories=function(varx=function(obj,index,array){ return (obj.category); }){
   this.directories=this.permissionFilter(this.directoriesX.filter(varx));
   this.pendingF(this.directories.length);
@@ -440,7 +469,12 @@ directoryTree.prototype.findLatestDiscussion=function(directory){
   this.pendingF(1);
   getCollectionArray("discussions",(res)=>{
     if(res&&res.length){ directory.latest=res[0]; }
-    this.pendingF();
+    if(!directory.latest) return this.pendingF();
+    getCollectionArray("discussions",(res2)=>{
+      if(res2&&res2.length){ directory.latest.author=res2[0].author; this.retrieveUser(directory.latest); }
+      else{ this.retrieveUser(directory.latest); }
+      this.pendingF();
+    },{findBy:{discussion:directory.latest._id},sortBy:{created:-1},limit:1});
   },{findBy:{directory:directory._id},sortBy:{created:-1},limit:1});
 }
 directoryTree.prototype.permissionFilter=function(array){
@@ -484,6 +518,7 @@ directoryTree.prototype.pendingF=function(increase=-1){
 //Should be able to support discussions.
 function originController(id,next,config={}){
   if(!id||id.length=="") return next([]);
+  if(id.includes("/create")){ id=id.replace("/create",""); }
   this.next=next;
   this.endArray=[];
   getCollectionArray("discussions",(disc)=>{

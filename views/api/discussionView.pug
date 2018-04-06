@@ -1,15 +1,14 @@
 if discussion && discussion.name
   .ui.basic.segment
-    .ui.comments
-      .comment(style="float:right;width:125px;text-align:center;")
-        img(style="width:80px;height:auto;",src='/images/elliot.jpg')
-        .content
-          if discussion.author && discussion.author.username
-            p(style="margin:0;")
-              a.author #{discussion.author.username}
-          .metadata
-            if discussion.created
-              span.date #{discussion.created}
+    .comment(style="float:right;width:125px;text-align:center;")
+      img(style="width:50px;height:auto;",src='/images/elliot.jpg')
+      .content
+        if discussion.author && discussion.author.username
+          p(style="margin:0;")
+            a.author #{discussion.author.username}
+        .metadata
+          if discussion.created
+            span.date #{discussion.created}
     h2.ui.header #{discussion.name}
     p #{discussion.text}
   h3.ui.dividing.header Comments

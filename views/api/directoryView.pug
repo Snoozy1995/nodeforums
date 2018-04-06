@@ -8,7 +8,7 @@ if directories && directories.length
           if bam != 0
             .ui.divider
           - bam++;
-          .item(style="min-height:50px;")
+          .item(style="min-height:20px;")
             .ui.mini.image
               i.icon.folder.open.outline.link(style="font-size:3em;")
             .middle.aligned.content
@@ -29,5 +29,5 @@ if directories && directories.length
                   .meta
                     a.ajax(data-href=child.latest._id.toString(),data-ui="childView",data-target=".primaryView") #{child.latest.name}
                     | by 
-                    a Somebody
+                    a #{child.latest.author.username}
       block Discussions
