@@ -11,7 +11,7 @@ block Discussions
             img.left.floated.ui.mini.spaced.rounded.image(src="/images/elliot.jpg")
           a(href="/"+disc._id.toString())
             h3.ui.header
-              | #{disc.title}
+              | #{disc.name}
               .sub.header Test description
         a(href="/"+disc._id.toString())
           .ui.right.floated.horizontal.list
@@ -27,7 +27,7 @@ block Discussions
     if permissions[directory._id.toString()]
       if (permissions[directory._id.toString()]&0x2)==0x2
         p(style="text-align:center;")
-          a.ui.primary.button(href="/createDiscussion?directory="+directory._id.toString()) Start discussion
+          a.ui.primary.button(href="/"+directory._id.toString()+"/create") Start discussion
     else if permissions.default && (permissions.default&0x2)==0x2
       p(style="text-align:center;")
-        a.ui.primary.button(href="/createDiscussion?directory="+directory._id.toString()) Start discussion
+        a.ui.primary.button(href="/"+directory._id.toString()+"/create") Start discussion

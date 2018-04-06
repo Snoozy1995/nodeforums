@@ -1,0 +1,42 @@
+if discussion && discussion.name
+  .ui.basic.segment
+    .ui.comments
+      .comment(style="float:right;width:125px;text-align:center;")
+        img(style="width:80px;height:auto;",src='/images/elliot.jpg')
+        .content
+          if discussion.author && discussion.author.username
+            p(style="margin:0;")
+              a.author #{discussion.author.username}
+          .metadata
+            if discussion.created
+              span.date #{discussion.created}
+    h2.ui.header #{discussion.name}
+    p #{discussion.text}
+  h3.ui.dividing.header Comments
+  .ui.comments
+    if comments && comments.length
+      each comment in comments
+        .comment
+          a.avatar
+            img(style="height:auto;",src='/images/elliot.jpg')
+          .content
+            if comment.author && comment.author.username
+              a.author #{comment.author.username}
+            .metadata
+              if comment.created
+                span.date #{comment.created}
+            .text #{comment.text}
+  form.ui.reply.form
+    .field
+      textarea.replyarea
+    .ui.blue.labeled.submit.icon.button
+      i.icon.edit
+      |  Add Reply
+  script.
+    $( ".date" ).each(function( index ) {
+      $(this).html(moment($(this).html()).fromNow());
+    });
+    $(".submit").click(function(e){
+      e.preventDefault();
+      socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
+    });

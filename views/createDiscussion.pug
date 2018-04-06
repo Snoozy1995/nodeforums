@@ -1,0 +1,19 @@
+extends layouts/main.pug
+
+block page
+  .formView
+    form.ui.form
+      .field
+        label Title
+        input#name(name="title",type="text",minlength="2",required)
+      .field
+        label Text
+        textarea#text(name="text",minlength="25",required)
+        button(type="submit").ui.button.green.bottom.attached.fluid.submitdiscussion Submit discussion
+    script.
+      $(".submitdiscussion").click((e)=>{
+        if($("#name").val().length<2) return; //Respond with error message.
+        if($("#text").val().length<25) return;
+        e.preventDefault();
+        socket.emit("creatediscussion","#{params.id}",$("#name").val(),$("#text").val());
+      });

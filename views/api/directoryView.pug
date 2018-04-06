@@ -25,8 +25,9 @@ if directories && directories.length
                           | #{child2.name}
             .ui.right.floated
               .content
-                .meta
-                  a Latest discussion
-                  | by 
-                  a Somebody
+                if child.latest
+                  .meta
+                    a #{child.latest.name}
+                    | by 
+                    a Somebody
       block Discussions
