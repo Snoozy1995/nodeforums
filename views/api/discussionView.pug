@@ -24,13 +24,13 @@ if discussion && discussion.name
             .metadata
               if comment.created
                 span.date #{comment.created}
-            .text #{comment.text}
+            .text !{comment.text}
   if permissions
     if permissions[discussion._id.toString()] || permissions.default
       if (permissions[discussion._id.toString()]&0x2)==0x2 || (permissions.default&0x2)==0x2
         form.ui.reply.form
           .field
-            textarea(minlength="2").replyarea
+            #quill
           .ui.blue.labeled.submit.icon.button
             i.icon.edit
             |  Add Reply
@@ -40,12 +40,19 @@ if discussion && discussion.name
           });
           $("textarea").keydown(function(e){
             if ((e.ctrlKey || e.metaKey) && (e.keyCode == 13 || e.keyCode == 10)) {
-              if($(".replyarea").val().length<2) return;
-              socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
+              if($(".ql-editor").text().length<2) return;
+              socket.emit("createcomment","#{discussion._id.toString()}",$(".ql-editor").html());
             }
           });
           $(".submit").click(function(e){
             e.preventDefault();
-            if($(".replyarea").val().length<2) return;
-            socket.emit("createcomment","#{discussion._id.toString()}",$(".replyarea").val());
+            if($(".ql-editor").text().length<2) return;
+            socket.emit("createcomment","#{discussion._id.toString()}",$(".ql-editor").html());
+          });
+          var quill = new Quill('#quill', {
+            modules: {
+              toolbar:true
+            },
+            placeholder: 'Compose an message..',
+            theme: 'snow'
           });

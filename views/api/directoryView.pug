@@ -1,33 +1,34 @@
 if directories && directories.length
   each directory in directories
-    a.ajax(href='/'+directory._id.toString(),data-href=directory._id.toString(),data-ui="childView",data-target=".primaryView").ui.horizontal.divider.header #{directory.name}
-    .ui.items
-      if directory.children && directory.children.length
-        - var bam=0;
-        each child in directory.children
-          if bam != 0
-            .ui.divider
-          - bam++;
-          .item(style="min-height:20px;")
-            .ui.mini.image
-              i.icon.folder.open.outline.link(style="font-size:3em;")
-            .middle.aligned.content
-              h3.ui.header
-                a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.name}
-                if child.description || child.children && child.children.length
-                  .sub.header 
-                    if child.description
-                      a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.description}
-                    if child.children && child.children.length
-                      each child2 in child.children
-                        a.ajax(href="/"+child2._id.toString(),data-href=child2._id.toString(),data-ui="childView",data-target=".primaryView")
-                          i.icon.folder.outline.link
-                          | #{child2.name}
-            .ui.right.floated
-              .content
-                if child.latest
-                  .meta
-                    a.ajax(data-href=child.latest._id.toString(),data-ui="childView",data-target=".primaryView") #{child.latest.name}
-                    | by 
-                    a #{child.latest.author.username}
-      block Discussions
+    if directory.permissions && (directory.permissions&0x1)==0x1
+      a.ajax(href='/'+directory._id.toString(),data-href=directory._id.toString(),data-ui="childView",data-target=".primaryView").ui.horizontal.divider.header #{directory.name}
+      .ui.items
+        if directory.children && directory.children.length
+          - var bam=0;
+          each child in directory.children
+            if bam != 0
+              .ui.divider
+            - bam++;
+            .item(style="min-height:20px;")
+              .ui.mini.image
+                i.icon.folder.open.outline.link(style="font-size:3em;")
+              .middle.aligned.content
+                h3.ui.header
+                  a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.name}
+                  if child.description || child.children && child.children.length
+                    .sub.header 
+                      if child.description
+                        a.ajax(href="/"+child._id.toString(),data-href=child._id.toString(),data-ui="childView",data-target=".primaryView") #{child.description}
+                      if child.children && child.children.length
+                        each child2 in child.children
+                          a.ajax(href="/"+child2._id.toString(),data-href=child2._id.toString(),data-ui="childView",data-target=".primaryView")
+                            i.icon.folder.outline.link
+                            | #{child2.name}
+              .ui.right.floated
+                .content
+                  if child.latest
+                    .meta
+                      a.ajax(data-href=child.latest._id.toString(),data-ui="childView",data-target=".primaryView") #{child.latest.name}
+                      | by 
+                      a.ajax(data-href=child.latest.author._id.toString() , data-ui="profileView" ,data-target=".modalView") #{child.latest.author.username}
+        block Discussions

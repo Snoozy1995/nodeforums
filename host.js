@@ -7,6 +7,7 @@ process.exit(1); });*/
 //--------------------------------------------------------------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+const   sanitizeHtml    = require('sanitize-html');
 const   config          = require("./config/config");
 const   express         = require('express');
 const   app             = express();
@@ -22,6 +23,13 @@ const   fs              = require("fs");
 const   crypto          = require("crypto");
 var sharedsession = require("express-socket.io-session");
 var global={},clients=[],permissionGroups={},permissionGroupsArray=[];
+
+global.sanitize={
+  allowedTags: [ 'h1','h2','h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol',
+  'nl', 'li', 'b', 'i', 'strong', 'em', 's','u', 'code', 'hr', 'br', 'div',
+  'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre', 'iframe' ]
+};
+
 var MongoClient = require('mongodb').MongoClient;
 var store = new MongoDBStore({uri:'mongodb://'+config.mongoIP+':'+config.mongoPort+'/',databaseName:config.mongoDB,collection: 'web_sessions'});
 store.on('error', function(error) { assert.ifError(error); assert.ok(false); });
@@ -75,11 +83,8 @@ function getCollectionArray(collection,next,options={}){
   var res=global.db.collection(collection).find(options.findBy);
   if(options.sortBy){ res.sort(options.sortBy); }
   if(options.limit){ res.limit(options.limit); }
-  if(options.count){
-    res.count((e,r)=>documentHandle(e,r,next));
-  }else{
-    res.toArray((err, res)=>documentHandle(err,res,next));
-  }
+  if(options.count) return res.count((e,r)=>documentHandle(e,r,next));
+  return res.toArray((err, res)=>documentHandle(err,res,next));
 }
 function insertDocument(collection,insert,next){
   if(insert instanceof Object) return global.db.collection(collection).insertOne(insert,(err, res)=>documentHandle(err,res,next));
@@ -91,6 +96,18 @@ function documentHandle(err,res,next){
   if(next) return next(res);
   return true;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//--------------------------------------------------------------------------------------------------//
+//----------------------------------------LOGGER FUNCTIONS------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//--------------------------------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+function mongoLOG(entry,loglevel){
+  this.logLevel=loglevel; //Loglevel -> 0:Disable,1:Minimal,2:Normal,3:Extended
+  this.entry=entry;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
@@ -205,12 +222,13 @@ userController.prototype.registerUI=function(ui,target,config={}){
   //Should check beforehand if target is taken, if it is then remove it.
   var len=Object.keys(this.update_ui).length;
   if(config.pageid!=undefined){ this.pageid=config.pageid; }
-  if(config.pushstate!=undefined){
+  if(config.pushstate!=undefined&&target!=".modalView"){
     this.pageid=config.pushstate;
     //Should check current url, if same url then dont.*
     this.socket.emit("pushstate","/"+config.pushstate,{ui:ui,target:target,id:this.pageid});
     this.updateUI("originView");
   }
+  if(config.pushstate!=undefined&&target==".modalView"){ this.modalid=config.pushstate; }
   if(!len){
     this.update_ui[ui]=target;
     this.updateUI(ui);
@@ -246,6 +264,7 @@ userController.prototype.createDiscussion=function(directory,name,text){
     if(!res.insertedId) return;
     if(global.directoryTree.directories[directory]&&!global.directoryTree.directories[directory].discussions){ global.directoryTree.directories[directory].discussions=[]; }
     global.directoryTree.directories[directory].discussions.unshift(res.ops[0]);
+    //Need to rebuild clients directory tree also technically or atleast merge the two which would be fairly doable.
     global.discussions++;
     this.socket.emit("redirect","/"+res.insertedId.toString());
     clients_update(directory,"threeStatistics");
@@ -255,7 +274,7 @@ userController.prototype.createDiscussion=function(directory,name,text){
 }
 userController.prototype.createComment=function(discussion,comment,parent){
   if(!this.hasPermission(PERMISSIONS.WRITE,discussion)) return;
-  var insert={discussion:ObjectId(discussion),text:comment,created:moment().format(),author:this.session._id};
+  var insert={discussion:ObjectId(discussion),text:sanitizeHtml(comment,global.sanitize),created:moment().format(),author:this.session._id};
   if(parent){ insert.parent=parent; }
   insertDocument("discussions",insert,(res)=>{ clients_update(discussion,"discussionView"); });
   return this;
@@ -299,23 +318,24 @@ userController.prototype.updateUI=function(ui){
     case "discussionView":
       return getCollectionArray("discussions",(result)=>{
         if(!result.length) return LOG("This should be handled error getting discussionView @ userController.updateUI");
-        new discussionTree(result[0],{
-          next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,discussion:that.discussion,comments:that.commentsArray},(err,html)=>res.renderUI(ui,html,err)),
-          //permissions:res.permissionsTree
-
-        });
+        return new discussionTree(result[0],{ next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,discussion:that.discussion,comments:that.commentsArray},(err,html)=>res.renderUI(ui,html,err)) });
       },{findBy:{_id:ObjectId(this.pageid)}});
     case "directoryView":
-      return app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:global.directoryTree.categories},(err,html)=>res.renderUI(ui,html,err));
-        //  permissions:this.permissionsTree
+      return app.render("api/"+ui,{session:this.session,directories:this.categories},(err,html)=>res.renderUI(ui,html,err));
     case "childView":
-      return app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,directories:[global.directoryTree.directories[this.pageid]]},(err,html)=>res.renderUI(ui,html,err));
-    case "railProfileView": return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
+      return app.render("api/"+ui,{session:this.session,directories:[this.directoriesEx[this.pageid]]},(err,html)=>res.renderUI(ui,html,err));
+    case "railProfileView": return app.render("api/"+ui,{session:this.session},(err,html)=>res.renderUI(ui,html,err));
     case "threeStatistics": return app.render("api/"+ui,{statistics:{online:clients.length,discussions:global.discussions}},(err,html)=>res.renderUI(ui,html,err));
     case "originView":
       return new originController(this.pageid,(r)=>{
         app.render("api/"+ui,{origin:r},(err,html)=>res.renderUI(ui,html,err));
       });
+    case "profileView": //Should check for permissions @ the requested user. Also originContrller needs rework if its to support user profile breadcrumbs.
+      if(!this.modalid) return;
+      return getCollectionArray("users",(discx)=>{
+        if(!discx.length) return;
+        return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
+      },{findBy:{_id:ObjectId(this.modalid)}});
   }
 }
 userController.prototype.renderUI=function(ui,html,err){
@@ -336,7 +356,61 @@ userController.prototype.getPermissionsTree=function(){
       }
     }
   }
+  this.applyPermissionsTree();
   return this.permissionsTree;
+}
+userController.prototype.applyPermissionsTree=function(){
+  if(!this.permissionsTree) return;
+  this.directories=[];
+  this.directories=global.directoryTree.directoriesEx.slice();
+  this.directoriesEx={}
+  //Apply any initial values if any.
+  for(var i=0;i<this.directories.length;i++){
+    if(this.permissionsTree[this.directories[i]._id.toString()]){
+      this.directories[i].permissions=this.permissionsTree[this.directories[i]._id.toString()];
+    }
+    this.directoriesEx[this.directories[i]._id.toString()]=this.directories[i];
+  }
+  //Get categories.
+  this.categories=this.directories.filter((val)=>{ return (val.category) });
+  this.permissionsTreeIterate(this.categories);
+}
+userController.prototype.permissionsTreeIterate=function(next){
+  for(var i=0;i<next.length;i++){
+    this.permissionsDecide(next[i]);
+    if(!next[i].children||!next[i].children.length) continue;
+    this.permissionsTreeIterate(next[i].children);
+  }
+}
+userController.prototype.permissionsDecide=function(next){
+  if(!this.permissionsTree) return;
+  if(this.permissionsTree[next._id.toString()]){
+    next.permissions=this.permissionsTree[next._id.toString()];
+  }else{ //Simple iteration right now. This could be improved a little bit in the future but it seems to work fine for now.
+    if(next.parent&&this.directoriesEx[next.parent]){
+      if(this.directoriesEx[next.parent].permissions){
+        next.permissions=this.directoriesEx[next.parent].permissions;
+      }else{
+        next.permissions=this.permissionsTree.default;
+      }
+    }else{
+      next.permissions=this.permissionsTree.default;
+    }
+  }
+}
+//Somewhat temporary although I think it should be at user level that the permissions are applied to whatever output.
+//Need to have some sort of parental map made, applying the permission value to each group, if it doesn't have a value, take its parents, so forth. This should be done in getPermissionsTree.
+//Only for directories of course, doing it for all discussions and comments and users would be unreasonable.
+userController.prototype.permissionFilter=function(array){
+  if(!this.permissionsTree||!array||!array.length) return array;
+  for(var i=array.length-1;i>=0;i--){
+    var perms=this.permissionsTree.default;
+    if(this.permissionsTree[array[i]._id.toString()]) perms=this.permissionsTree[array[i]._id.toString()];
+    if(!hasPermission("READ",perms)){ array.splice(i,1);}
+
+    if(array[i].children){ array[i].children=this.permissionFilter(array[i].children);  }
+    if(i==0) return array;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -360,7 +434,6 @@ function discussionTree(discussion,config={}){
   this.retrieveUser(this.discussion);
   return this;
 }
-
 discussionTree.prototype.getComments=function(varx=function(obj,index,array){ return (!obj.directory); }){
   getCollectionArray("discussions",(res)=>{
     this.comments=res;
@@ -415,6 +488,8 @@ discussionTree.prototype.pendingF=function(increase=-1){
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 function directoryTree(config={}){
+  this.startTime=Date.now();
+  this.pending=0;
   getCollectionArray("directories",(rex)=>{
     if(!rex||!rex.length) return;
     this.directories={};
@@ -422,39 +497,32 @@ function directoryTree(config={}){
     this.categories=rex.filter((val,index,array)=>{ return val.category; });
     for(var i=0;i<rex.length;i++){
       this.directories[rex[i]._id.toString()]=rex[i];
-    }
-    for(var x=0;x<this.categories.length;x++){
-      this.getChildren(this.categories[x],true);
+      this.getDiscussions(this.directories[rex[i]._id.toString()]);
     }
   });
-
-  //Rewrite config.permissions;
-  //Contains object with keys containing ids and a default. The permissions from other than default will overrule.
-  if(config.permissions) this.permissions=config.permissions;
-
-  this.startTime=Date.now();
-  this.pending=0;
-  //this.getDirectories(this.origin);
   return this;
 }
-directoryTree.prototype.getChildren=function(category,first=false){
-  var children=this.permissionFilter(this.directoriesEx.filter(function(obj,index,array){ return (obj.parent==category._id.toString()); })); //@tostringremove
+directoryTree.prototype.getDiscussions=function(directory){
+  this.pendingF(1);
+  getCollectionArray("discussions",(res)=>{
+    this.directories[directory._id.toString()].discussions=res; //Seperate this from directoryTree function maybe. Only find latest but except for that fuck it, we should perform this seperately when needed.
+    this.pendingF();
+    if(directory.category){ this.getChildren(directory);
+    }else{ this.findLatestDiscussion(directory); }
+  },{findBy:{directory:directory._id},sortBy:{created:-1},limit:50});
+}
+directoryTree.prototype.getChildren=function(category){
+  this.pendingF(1)
+  var children=this.directoriesEx.filter(function(obj,index,array){ return (obj.parent==category._id.toString()); }); //@tostringremove
   if(children&&children.length){
     category.children=children;
     this.pendingF(category.children.length);
-    if(!first){
-      this.pendingF(1);
-      getCollectionArray("discussions",(res)=>{
-        category.discussions=res;
-        this.pendingF();
-      },{findBy:{directory:category._id},sortBy:{created:-1},limit:50});
-    }
     for(var i=0;i<category.children.length;i++){
-      this.findLatestDiscussion(category.children[i]);
       this.getChildren(category.children[i]);
       this.pendingF();
     }
   }
+  this.pendingF();
 }
 directoryTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
@@ -465,34 +533,22 @@ directoryTree.prototype.retrieveUser=function(comment){
     }
   },{findBy:{_id:comment.author}});
 }
-//Needs some rewriting to support comments too, also needs to compare the latest comment against the latest discussion to see which is newest.
 directoryTree.prototype.findLatestDiscussion=function(directory){
+  console.log(directory.discussions);
+  if(!directory||!directory.discussions||!directory.discussions[0]) return this;
   this.pendingF(1);
-  getCollectionArray("discussions",(res)=>{
-    if(res&&res.length){ directory.latest=res[0]; }
-    if(!directory.latest) return this.pendingF();
-    getCollectionArray("discussions",(res2)=>{
-      if(res2&&res2.length){ directory.latest.author=res2[0].author; this.retrieveUser(directory.latest); }
-      else{ this.retrieveUser(directory.latest); }
-      this.pendingF();
-    },{findBy:{discussion:directory.latest._id},sortBy:{created:-1},limit:1});
-  },{findBy:{directory:directory._id},sortBy:{created:-1},limit:1});
-}
-directoryTree.prototype.permissionFilter=function(array){
-  if(this.permissions&&array.length){
-    for(var i=array.length-1;i>=0;i--){
-      var perms=this.permissions.default;
-      if(this.permissions[array[i]._id.toString()]) perms=this.permissions[array[i]._id.toString()];
-      if(!hasPermission("READ",perms)){ array.splice(i,1);}
-      if(i==0) return array;
-    }
-  }else return array;
+  directory.latest=directory.discussions[0];
+  getCollectionArray("discussions",(res2)=>{
+    if(res2&&res2.length&&!moment(directory.discussions[0].created).isSameOrAfter(res2[0].created)){ directory.latest.author=res2[0].author; }
+    this.retrieveUser(directory.latest);
+    this.pendingF();
+  },{findBy:{discussion:directory.latest._id},sortBy:{created:-1},limit:1});
 }
 directoryTree.prototype.pendingF=function(increase=-1){
   this.pending+=increase;
   if(!this.pending){
     LOG("Time taken loading directoryTree:",(Date.now()-this.startTime));
-    //if(this.next) this.next(this);
+    if(this.next) this.next(this);
   }
 }
 
@@ -516,10 +572,8 @@ function originController(id,next,config={}){
       this.endArray.unshift(disc[0]);
       id=disc[0].directory;
     }
-    getCollectionArray("directories",(directories)=>{
-      this.directories=directories;
-      this.testX(id);
-    });
+    this.directories=global.directoryTree.directoriesEx.slice();
+    this.testX(id);
   },{findBy:{_id:ObjectId(id)}});
 }
 originController.prototype.testX=function(id){
@@ -542,27 +596,22 @@ originController.prototype.testX=function(id){
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //First loaded after everything else is loaded.
 function loadRoutes(){
-  app.get(["/login","/register","/"],normalRoute);
+  app.get(["/","/login","/register"],normalRoute);
   app.get("/logout",(req,res)=>{
     req.session.destroy(function(err){ if(err) return LOG(err); });
     return res.redirect("/");
   });
   app.get("/:id/create",(req,res)=>{
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
-    getCollectionArray("directories",(directories)=>{
-      if(!directories.length) return res.redirect("/");
-      return res.render("createDiscussion",{session:req.session,params:req.params});
-    },{findBy:{_id:ObjectId(req.params.id)}});
+    if(!global.directoryTree.directories[req.params.id]) res.redirect("/");
+    return res.render("createDiscussion",{session:req.session,params:req.params});
   });
   app.get("/:id",(req,res)=>{
     if(!req.params.id||req.params.id.length!=12&&req.params.id.length!=24) return res.redirect("/");
-    getCollectionArray("directories",(directories)=>{
-      if(!directories.length) return;
-      return res.render("directory",{session:req.session,query:req.query});
-    },{findBy:{_id:ObjectId(req.params.id)}});
+    if(global.directoryTree.directories[req.params.id]) return res.render("directory",{session:req.session});
     getCollectionArray("discussions",(disc)=>{
-      if(!disc.length) return;
-      return res.render("discussion",{session:req.session,query:req.query});
+      if(!disc.length) return res.redirect("/"); 
+      return res.render("discussion",{session:req.session});
     },{findBy:{_id:ObjectId(req.params.id)}});
   });
   app.get("/*",(req,res)=>res.redirect("/"));
@@ -572,5 +621,5 @@ function loadRoutes(){
 function normalRoute(req,res){
   var url="landing";
   if(req.path.length>=2) url=req.path.substring(1);
-  return res.render(url,{session:req.session,query:req.query});
+  return res.render(url,{session:req.session});
 }
