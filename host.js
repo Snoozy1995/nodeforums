@@ -19,7 +19,7 @@ const   MongoDBStore    = require('connect-mongodb-session')(session);
 const   ObjectId        = require('mongodb').ObjectId; 
 const   io              = require('socket.io')(http);
 const   moment          = require("moment");
-const   fs              = require("fs");
+//const   fs              = require("fs");
 const   crypto          = require("crypto");
 var sharedsession = require("express-socket.io-session");
 var global={},clients=[],permissionGroups={},permissionGroupsArray=[];
