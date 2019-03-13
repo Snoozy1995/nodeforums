@@ -35,9 +35,7 @@ store.on('error', function(error) { assert.ifError(error); assert.ok(false); });
 const session1=session({
   secret: config.session_secret,
   resave: false,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
-  },
+  cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }, // 1 week
   saveUninitialized: true,
   store: store
 });
@@ -97,17 +95,6 @@ function documentHandle(err,res,next){
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
-//----------------------------------------LOGGER FUNCTIONS------------------------------------------//
-//--------------------------------------------------------------------------------------------------//
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-function mongoLOG(entry,loglevel){
-  this.logLevel=loglevel; //Loglevel -> 0:Disable,1:Minimal,2:Normal,3:Extended
-  this.entry=entry;
-}
-
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-//--------------------------------------------------------------------------------------------------//
 //-------------------------------------PERMISSION FUNCTIONS-----------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,7 +129,7 @@ function getDefaultGroup(){
   return false;
 }
 
-//Maybe rewrite to use userController.prototype.updateUIALL();
+//@todo Maybe rewrite to use userController.prototype.updateUIALL();
 function clients_update(id,ui){
   for(var i=0;i<clients.length;i++){
     var client=clients[i];
