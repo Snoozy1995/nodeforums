@@ -21,7 +21,7 @@ const   moment          = require("moment");
 //const   fs              = require("fs");
 const   crypto          = require("crypto");
 var sharedsession = require("express-socket.io-session");
-var global={},clients=[],permissionGroups={},permissionGroupsArray=[];
+var /*global={},*/clients=[],permissionGroups={},permissionGroupsArray=[];
 
 global.sanitize={
   allowedTags: [ 'h1','h2','h3', 'h4', 'h5', 'h6', 'blockquote', 'p', 'a', 'ul', 'ol',
