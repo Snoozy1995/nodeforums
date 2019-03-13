@@ -301,17 +301,34 @@ userController.prototype.setSession=function(session={}){
   this.session.save();
   return this;
 }
+
+/**
+ * @author Snoozy
+ * @description  Encrypt password, applying sha256 encryption.
+ * @params {string} password
+*/
 userController.prototype.encrypt=function(password){
   if(password.length!=64) return;
   var hash = crypto.createHmac('sha256',config.mongoSecret);
   hash.update(password.substring(16,48));
   return hash.digest('hex');
 }
+
+/**
+ * @author Snoozy
+ * @description  Updates all UI elements that currently are in use by the userController.
+*/
 userController.prototype.updateUIALL=function(){
   for(var key in this.update_ui){
     this.updateUI(key);
   }
 }
+
+/**
+ * @author Snoozy
+ * @description Updates the requested UI.
+ * @params {string} ui
+*/
 userController.prototype.updateUI=function(ui){
   var res=this;
   switch(ui){
@@ -338,6 +355,14 @@ userController.prototype.updateUI=function(ui){
       },{findBy:{_id:ObjectId(this.modalid)}});
   }
 }
+
+/**
+ * @author Snoozy
+ * @description  Renders the requested UI
+ * @params {string} ui
+ * @params {string} html
+ * @params {string} err
+*/
 userController.prototype.renderUI=function(ui,html,err){
   if(err) return LOG(err);
   return this.socket.emit("update ui",this.update_ui[ui],html);
@@ -398,6 +423,12 @@ userController.prototype.permissionsDecide=function(next){
     }
   }
 }
+
+/**
+ * @author Snoozy
+ * @description Currently all it does is filter out the directories with not proper read permissions on a per user-basis.
+ * @params {array} array
+*/
 //Somewhat temporary although I think it should be at user level that the permissions are applied to whatever output.
 //Need to have some sort of parental map made, applying the permission value to each group, if it doesn't have a value, take its parents, so forth. This should be done in getPermissionsTree.
 //Only for directories of course, doing it for all discussions and comments and users would be unreasonable.
@@ -407,7 +438,6 @@ userController.prototype.permissionFilter=function(array){
     var perms=this.permissionsTree.default;
     if(this.permissionsTree[array[i]._id.toString()]) perms=this.permissionsTree[array[i]._id.toString()];
     if(!hasPermission("READ",perms)){ array.splice(i,1);}
-
     if(array[i].children){ array[i].children=this.permissionFilter(array[i].children);  }
     if(i==0) return array;
   }
@@ -552,7 +582,6 @@ directoryTree.prototype.pendingF=function(increase=-1){
   }
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
 //----------------------------------------originController------------------------------------------//
@@ -586,7 +615,6 @@ originController.prototype.testX=function(id){
     return;
   }
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //--------------------------------------------------------------------------------------------------//
