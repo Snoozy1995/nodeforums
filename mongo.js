@@ -11,7 +11,6 @@ module.exports=function(global){
             global.db = db.db(global.config.mongoDB);
             this.db=db.db(global.config.mongoDB);
             global.db.on('close',()=>this.connect());
-
             //This code should be seperated into another file. This mongo.js file should be exclusively for database specific stuff, not stuff in conjugation with forum data actions.
             loadRoutes(); //Hmpf?
             this.get("permission_groups",(res)=>{
@@ -42,7 +41,7 @@ module.exports=function(global){
         return true;
     }
     this._handle=function(){
-        if (err) throw err;
+        if(err) throw err;
         if(next) return next(res);
         return true;
     }

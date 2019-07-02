@@ -129,7 +129,11 @@ function getDefaultGroup(){
   return false;
 }
 
-//@todo Maybe rewrite to use userController.prototype.updateUIALL();
+/**
+ * @description Updates all clients on said page accordingly if a change happens. That's atleast the idea of it.
+ * @param {integer} id 
+ * @param {string} ui 
+ */
 function clients_update(id,ui){
   for(var i=0;i<clients.length;i++){
     var client=clients[i];
@@ -285,9 +289,9 @@ userController.prototype.setSession=function(session={}){
 }
 
 /**
- * @author Snoozy
  * @description  Encrypt password, applying sha256 encryption.
- * @params {string} password
+ * @param {string} password
+ * @returns {string}
 */
 userController.prototype.encrypt=function(password){
   if(password.length!=64) return;
@@ -297,26 +301,20 @@ userController.prototype.encrypt=function(password){
 }
 
 /**
- * @author Snoozy
  * @description  Updates all UI elements that currently are in use by the userController.
 */
-userController.prototype.updateUIALL=function(){
-  for(var key in this.update_ui){
-    this.updateUI(key);
-  }
-}
+userController.prototype.updateUIALL=function(){ for(var key in this.update_ui){ this.updateUI(key); } }
 
 /**
- * @author Snoozy
  * @description Updates the requested UI.
- * @params {string} ui
+ * @param {string} ui
 */
 userController.prototype.updateUI=function(ui){
   var res=this;
   switch(ui){
     case "discussionView":
       return getCollectionArray("discussions",(result)=>{
-        if(!result.length) return LOG("This should be handled error getting discussionView @ userController.updateUI");
+        if(!result.length) return LOG("This should be handled... Error getting discussionView @ userController.updateUI... Please contact development team if this error occurs on a production stage.");
         return new discussionTree(result[0],{ next:(that)=>app.render("api/"+ui,{permissions:res.permissionsTree,session:res.session,discussion:that.discussion,comments:that.commentsArray},(err,html)=>res.renderUI(ui,html,err)) });
       },{findBy:{_id:ObjectId(this.pageid)}});
     case "directoryView":
@@ -330,25 +328,29 @@ userController.prototype.updateUI=function(ui){
         app.render("api/"+ui,{origin:r},(err,html)=>res.renderUI(ui,html,err));
       });
     case "profileView": //Should check for permissions @ the requested user. Also originContrller needs rework if its to support user profile breadcrumbs.
-      if(!this.modalid) return;
+      if(!this.modalid) return LOG("This should be handled... Error getting profileView @ userController.updateUI... Please contact development team if this error occurs on a production stage.");
       return getCollectionArray("users",(discx)=>{
-        if(!discx.length) return;
+        if(!discx.length) return LOG("This should be handled... Error finding user through mongodb get query. User might not exist. Please contact development team and make us aware, if this error occurs on production stage.");
         return app.render("api/"+ui,{session:res.session},(err,html)=>res.renderUI(ui,html,err));
       },{findBy:{_id:ObjectId(this.modalid)}});
   }
 }
 
 /**
- * @author Snoozy
- * @description  Renders the requested UI
- * @params {string} ui
- * @params {string} html
- * @params {string} err
+ * @description  Renders the requested UI accordingly to the information given.
+ * @param {string} ui
+ * @param {string} html
+ * @param {string} err
 */
 userController.prototype.renderUI=function(ui,html,err){
   if(err) return LOG(err);
   return this.socket.emit("update ui",this.update_ui[ui],html);
 }
+
+/**
+ * @description Retrieve the users permissiontree and establish the overriding permissions etc.
+ * @returns {array}
+ */
 userController.prototype.getPermissionsTree=function(){
   if(!this.groups||!this.groups.length) return;
   this.permissionsTree={};
@@ -366,6 +368,10 @@ userController.prototype.getPermissionsTree=function(){
   this.applyPermissionsTree();
   return this.permissionsTree;
 }
+
+/**
+ * @description Appply the permissionstree to the userController and filter through the data as anticipated.
+ */
 userController.prototype.applyPermissionsTree=function(){
   if(!this.permissionsTree) return;
   this.directories=[];
@@ -382,6 +388,11 @@ userController.prototype.applyPermissionsTree=function(){
   this.categories=this.directories.filter((val)=>{ return (val.category) });
   this.permissionsTreeIterate(this.categories);
 }
+
+/**
+ * @description Internal part of the permission calculation system.
+ * @param {function} next
+ */
 userController.prototype.permissionsTreeIterate=function(next){
   for(var i=0;i<next.length;i++){
     this.permissionsDecide(next[i]);
@@ -389,6 +400,11 @@ userController.prototype.permissionsTreeIterate=function(next){
     this.permissionsTreeIterate(next[i].children);
   }
 }
+
+/**
+ * @description Internal part of the permission calculation system.
+ * @param {function} next
+ */
 userController.prototype.permissionsDecide=function(next){
   if(!this.permissionsTree) return;
   if(this.permissionsTree[next._id.toString()]){
@@ -407,9 +423,8 @@ userController.prototype.permissionsDecide=function(next){
 }
 
 /**
- * @author Snoozy
  * @description Currently all it does is filter out the directories with not proper read permissions on a per user-basis.
- * @params {array} array
+ * @param {array} array
 */
 //Somewhat temporary although I think it should be at user level that the permissions are applied to whatever output.
 //Need to have some sort of parental map made, applying the permission value to each group, if it doesn't have a value, take its parents, so forth. This should be done in getPermissionsTree.
@@ -430,6 +445,11 @@ userController.prototype.permissionFilter=function(array){
 //---------------------------------------discussions Tree-------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * @description Creates a discussion tree object according to the information, will need a discussion obj from database typically.
+ * @param {object} discussion 
+ * @param {object} config 
+ */
 function discussionTree(discussion,config={}){
   if(!discussion||!discussion._id) return;
   this.discussion=discussion;
@@ -445,6 +465,11 @@ function discussionTree(discussion,config={}){
   this.retrieveUser(this.discussion);
   return this;
 }
+
+/**
+ * @description Retrieve the comments from the discussion inside active database.
+ * @param {function} varx
+ */
 discussionTree.prototype.getComments=function(varx=function(obj,index,array){ return (!obj.directory); }){
   getCollectionArray("discussions",(res)=>{
     this.comments=res;
@@ -465,6 +490,12 @@ discussionTree.prototype.getComments=function(varx=function(obj,index,array){ re
 
   },{findBy:{discussion:this.discussion._id}});
 }
+
+/**
+ * @todo Figure out a better approach to this preferably. I feel like this will be a cumbersome way of handling it, like if loading a large discussion thread, the amount of users to retrieve might cause issues.
+ * @description Retrieves user from database according to comment, to retrieve their up to date information.
+ * @param {object} comment
+ */
 discussionTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
   getCollectionArray("users",(res)=>{
