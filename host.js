@@ -265,9 +265,8 @@ userController.prototype.createComment=function(discussion,comment,parent){
   insertDocument("discussions",insert,(res)=>{ clients_update(discussion,"discussionView"); });
   return this;
 }
-userController.prototype.disconnect=function(){ 
-  clients.splice(this,1); 
-}
+userController.prototype.disconnect=function(){ clients.splice(this,1); return this; }
+
 userController.prototype.loadUser=function(username,setSession=false,redirect=false){
   getCollectionArray("users",(res)=>{
     if(!res.length) return this.session.destroy(function(err){ 
@@ -282,6 +281,11 @@ userController.prototype.loadUser=function(username,setSession=false,redirect=fa
     if(redirect){ setTimeout(()=>this.socket.emit("redirect","/"),500); }
   },{findBy:{username:username}});
 }
+
+/**
+ * @description Sets the users session.
+ * @param {object} session
+ */
 userController.prototype.setSession=function(session={}){
   for(var index in session){ this.session[index]=session[index]; }
   this.session.save();
@@ -477,17 +481,13 @@ discussionTree.prototype.getComments=function(varx=function(obj,index,array){ re
     this.commentsArray=this.comments.filter(varx);
     this.pendingF(this.commentsArray.length);
     for(var i=0;i<this.commentsArray.length;i++){
-      if(this.commentsArray[i].author){
-        this.retrieveUser(this.commentsArray[i]);
-        //Retrieve minimal data about author.
-      }
+      if(this.commentsArray[i].author){ this.retrieveUser(this.commentsArray[i]); } //Retrieve minimal data about author.
       this.commentsArray[i].children=this.comments.filter((obj,index,array)=>{ 
         if(!obj.parent) return false;
         return (obj.parent.toString()==this.commentsArray[i]._id.toString());
       });
       this.pendingF();
     }
-
   },{findBy:{discussion:this.discussion._id}});
 }
 
@@ -499,10 +499,9 @@ discussionTree.prototype.getComments=function(varx=function(obj,index,array){ re
 discussionTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
   getCollectionArray("users",(res)=>{
-    if(res&&res.length){
-      comment.author=res[0];
-      this.pendingF();
-    }
+    if(!res||!res.length) return; //@todo handle.
+    comment.author=res[0];
+    this.pendingF();
   },{findBy:{_id:ObjectId(comment.author)}});
 }
 discussionTree.prototype.permissionFilter=function(array){
@@ -517,10 +516,9 @@ discussionTree.prototype.permissionFilter=function(array){
 }
 discussionTree.prototype.pendingF=function(increase=-1){
   this.pending+=increase;
-  if(this.pending<=0){
-    LOG("Time taken loading discussionTree:",(Date.now()-this.startTime));
-    if(this.next) this.next(this);
-  }
+  if(this.pending>0) return; //@todo handle.
+  LOG("Time taken loading discussionTree:",(Date.now()-this.startTime));
+  if(this.next) this.next(this);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -548,8 +546,7 @@ directoryTree.prototype.getDiscussions=function(directory){
   getCollectionArray("discussions",(res)=>{
     this.directories[directory._id.toString()].discussions=res; //Seperate this from directoryTree function maybe. Only find latest but except for that fuck it, we should perform this seperately when needed.
     this.pendingF();
-    if(directory.category){ this.getChildren(directory);
-    }else{ this.findLatestDiscussion(directory); }
+    if(directory.category){ this.getChildren(directory); }else{ this.findLatestDiscussion(directory); }
   },{findBy:{directory:directory._id},sortBy:{created:-1},limit:50});
 }
 directoryTree.prototype.getChildren=function(category){
@@ -568,10 +565,9 @@ directoryTree.prototype.getChildren=function(category){
 directoryTree.prototype.retrieveUser=function(comment){
   this.pendingF(1);
   getCollectionArray("users",(res)=>{
-    if(res&&res.length){
-      comment.author=res[0];
-      this.pendingF();
-    }
+    if(!res||!res.length) return; //@todo handle
+    comment.author=res[0];
+    this.pendingF();
   },{findBy:{_id:comment.author}});
 }
 directoryTree.prototype.findLatestDiscussion=function(directory){
@@ -598,8 +594,13 @@ directoryTree.prototype.pendingF=function(increase=-1){
 //----------------------------------------originController------------------------------------------//
 //--------------------------------------------------------------------------------------------------//
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-//Used to create the backlink from current directory.
-//Should be able to support discussions.
+/**
+ * @todo Should be able to support discussions/I kinda think it does already??
+ * @description Used to create the backlink from current directory.
+ * @param {string} id 
+ * @param {function} next 
+ * @param {object} config 
+ */
 function originController(id,next,config={}){
   if(!id||id.length=="") return next([]);
   if(id.includes("/create")){ id=id.replace("/create",""); }
@@ -615,6 +616,10 @@ function originController(id,next,config={}){
     this.testX(id);
   },{findBy:{_id:ObjectId(id)}});
 }
+/**
+ * @description Used for above function constructor, handles the processing basically.
+ * @param {ObjectID} id
+ */
 originController.prototype.testX=function(id){
   for(var i=0;i<this.directories.length;i++){
     if(this.directories[i]._id.toString()!=id.toString()) continue;
