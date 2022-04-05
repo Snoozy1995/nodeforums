@@ -1,7 +1,6 @@
+**Project no longer maintained.**
+
 **Node forums is a forum solution made by Snoozy1995. The solution is made using primarily javascript.**
-
-
-THIS INFO BELOW IS OUTDATED. REWRITE IN PROGRESS.
 
 **Components:**
 
