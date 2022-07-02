@@ -1,4 +1,4 @@
-**Project no longer maintained.**
+**Project no longer maintained. This was a project made primarily as a hobby project to experiment with realtime ui functionality and possibilities**
 
 **Node forums is a forum solution made by Snoozy1995. The solution is made using primarily javascript.**
 
